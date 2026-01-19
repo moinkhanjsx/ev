@@ -233,10 +233,10 @@ const DashboardPage = () => {
                         )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

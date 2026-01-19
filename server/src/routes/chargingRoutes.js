@@ -484,7 +484,10 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
         { 
           new: true, 
           session,
-          populate: 'requesterId helperId', 'name email city'
+          populate: [
+            { path: 'requesterId', select: 'name email city' },
+            { path: 'helperId', select: 'name email city' }
+          ]
         }
       );
 
@@ -660,7 +663,7 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
         { 
           new: true, 
           session,
-          populate: 'requesterId', 'name email city'
+          populate: { path: 'requesterId', select: 'name email city' }
         }
       );
 

@@ -222,8 +222,6 @@ const ActiveRequests = () => {
                             {new Date(request.createdAt).toLocaleDateString()}
                           </div>
                         </div>
-                      </div>
-
                         <div className="text-right">
                           {request.status === 'OPEN' && (
                             <button
