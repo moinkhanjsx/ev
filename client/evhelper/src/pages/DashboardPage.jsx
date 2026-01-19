@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { authAPI } from '../utils/auth.js';
+import api, { authAPI } from '../utils/auth.js';
 import socketService from '../utils/socket.js';
 
 const DashboardPage = () => {
@@ -57,18 +57,54 @@ const DashboardPage = () => {
   const fetchRequests = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await authAPI.getCurrentUser();
-      setRequests(response.requests || []);
+      const response = await api.get('/charging/requests');
+      
+      if (response.data.success) {
+        setRequests(response.data.requests || []);
+      } else {
+        setError(response.data.message || 'Failed to fetch your requests');
+      }
     } catch (err) {
-      setError('Failed to fetch active requests');
+      setError(err.response?.data?.message || 'Failed to fetch your requests');
+    } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = () => {
     actions.logout();
+  };
+
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      const response = await api.post(`/charging/requests/${requestId}/accept`);
+      
+      if (response.data.success) {
+        alert('Request accepted successfully!');
+        fetchRequests(); // Refresh the requests list
+      } else {
+        alert(response.data.message || 'Failed to accept request');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || error.message || 'Failed to accept request');
+    }
+  };
+
+  const handleCancelRequest = async (requestId) => {
+    try {
+      const response = await api.post(`/charging/requests/${requestId}/cancel`);
+      
+      if (response.data.success) {
+        alert('Request canceled successfully!');
+        fetchRequests(); // Refresh the requests list
+      } else {
+        alert(response.data.message || 'Failed to cancel request');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || error.message || 'Failed to cancel request');
+    }
   };
 
   if (!state.isAuthenticated) {
@@ -97,6 +133,26 @@ const DashboardPage = () => {
               >
                 Sign Out
               </button>
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="bg-gray-50 px-4 py-5 sm:p-6 lg:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <a
+                href="/charging-request"
+                className="flex items-center justify-center px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md transition-colors"
+              >
+                <span className="text-2xl mr-3">⚡</span>
+                <span className="text-lg font-semibold">Create Charging Request</span>
+              </a>
+              <a
+                href="/active-requests"
+                className="flex items-center justify-center px-6 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md transition-colors"
+              >
+                <span className="text-2xl mr-3">🔋</span>
+                <span className="text-lg font-semibold">View Active Requests</span>
+              </a>
             </div>
           </div>
 
@@ -211,10 +267,16 @@ const DashboardPage = () => {
                         {/* Action buttons based on status */}
                         {request.status === 'OPEN' && (
                           <div className="space-x-2">
-                            <button className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-green-600 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                            <button 
+                              onClick={() => handleAcceptRequest(request._id)}
+                              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-green-600 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                            >
                               Accept Request
                             </button>
-                            <button className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                            <button 
+                              onClick={() => handleCancelRequest(request._id)}
+                              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                            >
                               Cancel Request
                             </button>
                           </div>

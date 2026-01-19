@@ -6,7 +6,7 @@ const initialState = {
   user: null,
   token: null,
   isAuthenticated: false,
-  loading: false,
+  loading: true, // Start with loading true to check localStorage
   error: null,
 };
 
@@ -123,6 +123,9 @@ export const AuthProvider = ({ children }) => {
         type: AUTH_ACTIONS.LOGIN_SUCCESS,
         payload: { user, token }
       });
+    } else {
+      // No stored auth, stop loading
+      dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
     }
   }, []);
 

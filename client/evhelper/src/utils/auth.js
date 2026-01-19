@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// API base URL - adjust based on your server configuration
-const API_BASE_URL = 'http://localhost:5000/api';
+// API base URL - use /api for both dev and production (Vite proxy handles dev)
+const API_BASE_URL = '/api';
 
 // Create axios instance with default configuration
 const api = axios.create({

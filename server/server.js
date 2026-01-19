@@ -1,11 +1,34 @@
 import http from "http";
+import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
 import app from "./src/app.js";
+import ChargingRequest from './src/models/ChargingRequest.js';
+import User from './src/models/User.js';
+
+dotenv.config();
 import { Server } from "socket.io";
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: { origin: "*" }
+});
+
+// Socket authentication middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId;
+    next();
+  } catch (err) {
+    next(new Error('Invalid token'));
+  }
 });
 
 // Make io instance available to routes
@@ -27,12 +50,32 @@ const sanitizeCityName = (city) => {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
+  // Authenticate socket using JWT token from handshake
+  const token = socket.handshake.auth.token;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      User.findById(decoded.userId)
+        .then(user => {
+          if (user) {
+            socket.userId = user._id.toString();
+            socket.userCity = user.city;
+            console.log(`Socket authenticated for user: ${user.name} (${user._id})`);
+          }
+        })
+        .catch(err => console.error('Socket authentication error:', err));
+    } catch (error) {
+      console.error('Socket JWT verification error:', error);
+    }
+  }
+
   /**
-   * Handle user joining a city-specific room
-   * Event: 'join-city'
-   * Data: { city: string }
-   */
-  socket.on("join-city", (data) => {
+ * Handle user joining a city-specific room
+ * Event: 'join-city'
+ * Data: { city: string }
+ */
+socket.on("join-city", (data) => {
     try {
       const { city } = data;
 
@@ -75,10 +118,10 @@ io.on("connection", (socket) => {
   });
 
   /**
-   * Handle leaving city room
-   * Event: 'leave-city'
-   */
-  socket.on("leave-city", () => {
+ * Handle leaving city room
+ * Event: 'leave-city'
+ */
+socket.on("leave-city", () => {
     if (socket.roomName) {
       socket.leave(socket.roomName);
       
@@ -100,11 +143,11 @@ io.on("connection", (socket) => {
   });
 
   /**
-   * Handle charging requests within a city
-   * Event: 'charging-request'
-   * Data: charging request object
-   */
-  socket.on("charging-request", (requestData) => {
+ * Handle charging requests within a city
+ * Event: 'charging-request'
+ * Data: charging request object
+ */
+socket.on("charging-request", (requestData) => {
     if (socket.roomName) {
       // Broadcast charging request to all users in same city (including sender for confirmation)
       io.to(socket.roomName).emit("charging-request", {
@@ -121,11 +164,11 @@ io.on("connection", (socket) => {
   });
 
   /**
-   * Handle accepting charging requests with race condition protection
-   * Event: 'accept-charging-request'
-   * Data: { requestId: string }
-   */
-  socket.on("accept-charging-request", async (data) => {
+ * Handle accepting charging requests with race condition protection
+ * Event: 'accept-charging-request'
+ * Data: { requestId: string }
+ */
+socket.on("accept-charging-request", async (data) => {
     try {
       const { requestId } = data;
       const helperId = socket.userId; // Assuming userId is stored in socket after auth
@@ -140,17 +183,8 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Import models here to avoid circular dependencies
-      const ChargingRequest = (await import('./src/models/ChargingRequest.js')).default;
-      const User = (await import('./src/models/User.js')).default;
-
-      // Start a session for atomic operations
-      const session = await ChargingRequest.startSession();
-      session.startTransaction();
-
       try {
-        // Find and update request atomically
-        // This ensures only one helper can accept the request (race condition protection)
+        // Find and update request
         const request = await ChargingRequest.findOneAndUpdate(
           {
             _id: requestId,
@@ -166,14 +200,11 @@ io.on("connection", (socket) => {
           },
           {
             new: true,
-            session,
             returnDocument: "after"
           }
         ).populate('requesterId helperId', 'name email city');
 
         if (!request) {
-          await session.abortTransaction();
-          session.endSession();
           
           // Check if request exists but is already accepted
           const existingRequest = await ChargingRequest.findById(requestId);
@@ -191,23 +222,19 @@ io.on("connection", (socket) => {
               });
             }
           } else {
-            socket.emit("accept-failed", {
-              requestId: requestId,
-              reason: "Request not found"
-            });
+              socket.emit("accept-failed", {
+                requestId: requestId,
+                reason: "Request not found"
+              });
           }
           return;
         }
-
-        // Commit the transaction
-        await session.commitTransaction();
-        session.endSession();
 
         console.log(`Charging request ${requestId} accepted by helper ${helperId}`);
 
         // Emit real-time notifications
         
-        // 1. Notify the specific requester that their request was accepted
+        // 1. Notify specific requester that their request was accepted
         io.to(request.requesterId._id.toString()).emit("charging-request-accepted", {
           request: {
             id: request._id,
@@ -221,7 +248,7 @@ io.on("connection", (socket) => {
           timestamp: new Date().toISOString()
         });
 
-        // 2. Notify the accepting helper for confirmation
+        // 2. Notify accepting helper for confirmation
         socket.emit("accept-confirmed", {
           request: {
             id: request._id,
@@ -235,7 +262,7 @@ io.on("connection", (socket) => {
           timestamp: new Date().toISOString()
         });
 
-        // 3. Notify all other helpers in the same city that this request is no longer available
+        // 3. Notify all other helpers in same city that this request is no longer available
         socket.to(socket.roomName).emit("request-taken", {
           requestId: requestId,
           message: `Charging request in ${socket.userCity} has been accepted`,
@@ -244,7 +271,7 @@ io.on("connection", (socket) => {
           timestamp: new Date().toISOString()
         });
 
-        // 4. Broadcast general notification to the city
+        // 4. Broadcast general notification to city
         io.to(socket.roomName).emit("request-accepted-notification", {
           requestId: request._id,
           message: `A charging request has been accepted in ${socket.userCity}`,
@@ -253,54 +280,26 @@ io.on("connection", (socket) => {
           timestamp: new Date().toISOString()
         });
 
-      } catch (transactionError) {
-        await session.abortTransaction();
-        session.endSession();
-        
-        console.error("Transaction error during request acceptance:", transactionError);
+      } catch (error) {
+        console.error("Error accepting charging request:", error);
         socket.emit("accept-failed", {
           requestId: requestId,
-          reason: "Database error during acceptance",
-          error: "Transaction failed"
+          reason: "Server error while processing request"
         });
       }
-
     } catch (error) {
-      console.error("Error accepting charging request:", error);
-      socket.emit("accept-failed", {
-        requestId: data.requestId,
-        reason: "Internal server error",
-        error: "Server error occurred"
-      });
+      console.error("Socket accept-charging-request error:", error);
+      socket.emit("error", { message: "Failed to process request acceptance" });
     }
   });
 
-  /**
-   * Handle disconnection
-   */
   socket.on("disconnect", () => {
-    if (socket.roomName && socket.userCity) {
-      // Notify other users in the same city that this user left
-      socket.to(socket.roomName).emit("user-left-city", {
-        userId: socket.id,
-        city: socket.userCity,
-        timestamp: new Date().toISOString()
-      });
-      
-      console.log(`User ${socket.id} disconnected from ${socket.roomName}`);
-    } else {
-      console.log(`User ${socket.id} disconnected`);
-    }
-  });
-
-  /**
-   * Handle errors
-   */
-  socket.on("error", (error) => {
-    console.error(`Socket error for user ${socket.id}:`, error);
+    console.log("User disconnected:", socket.id);
   });
 });
 
-server.listen(5000, () => {
-  console.log("Server running on port 5000");
+const PORT = process.env.PORT || 5000;
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

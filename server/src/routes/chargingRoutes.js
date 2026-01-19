@@ -16,7 +16,7 @@ const TOKEN_COST = 5;
  */
 router.post("/requests", authMiddleware, async (req, res) => {
   try {
-    const { location, urgency, message, contactInfo, estimatedTime } = req.body;
+    const { location, urgency, message, contactInfo, contact, estimatedTime, timeAvailable } = req.body;
     const userId = req.user._id;
     const userCity = req.user.city;
 
@@ -53,15 +53,11 @@ router.post("/requests", authMiddleware, async (req, res) => {
       });
     }
 
-    // Start a session for atomic operations
-    const session = await User.startSession();
-    session.startTransaction();
-
     try {
       // Deduct tokens from user
       const updatedUser = await User.findByIdAndUpdate(
         userId,
-        { 
+        {
           $inc: { tokenBalance: -TOKEN_COST },
           $push: {
             tokenHistory: {
@@ -72,9 +68,8 @@ router.post("/requests", authMiddleware, async (req, res) => {
             }
           }
         },
-        { 
-          new: true, 
-          session,
+        {
+          new: true,
           select: 'tokenBalance email name city'
         }
       );
@@ -84,28 +79,26 @@ router.post("/requests", authMiddleware, async (req, res) => {
       }
 
       // Create charging request
-      const chargingRequest = await ChargingRequest.create(
-        [
-          {
-            requesterId: userId,
-            city: userCity,
-            status: "OPEN",
-            location: location.trim(),
-            urgency: urgency.toLowerCase(),
-            message: message ? message.trim() : "",
-            contactInfo: contactInfo ? contactInfo.trim() : "",
-            estimatedTime: estimatedTime ? parseInt(estimatedTime) : null,
-            tokenCost: TOKEN_COST
-          }
-        ],
-        { session }
-      );
+      const request = await ChargingRequest.create({
+        requesterId: userId,
+        city: userCity,
+        status: "OPEN",
+        location: location.trim(),
+        urgency: urgency.toLowerCase(),
+        message: message ? message.trim() : "",
+        contactInfo: (contactInfo ?? contact ?? "").toString().trim(),
+        estimatedTime: estimatedTime ? parseInt(estimatedTime) : null,
+        tokenCost: TOKEN_COST
+      });
 
-      const request = chargingRequest[0];
-
-      // Commit the transaction
-      await session.commitTransaction();
-      session.endSession();
+      console.log(`\n=== NEW REQUEST CREATED ===`);
+      console.log(`Request ID: ${request._id}`);
+      console.log(`User ID: ${userId}`);
+      console.log(`City: "${userCity}"`);
+      console.log(`Status: ${request.status}`);
+      console.log(`Location: ${request.location}`);
+      console.log(`Urgency: ${request.urgency}`);
+      console.log(`===========================\n`);
 
       // Populate requester information for socket event
       const populatedRequest = await ChargingRequest.findById(request._id)
@@ -119,23 +112,20 @@ router.post("/requests", authMiddleware, async (req, res) => {
       if (io) {
         const roomName = `city-${userCity.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
         
-        io.to(roomName).emit('charging-request-created', {
-          request: {
-            id: request._id,
-            requesterId: request.requesterId,
-            requesterName: updatedUser.name,
-            requesterEmail: updatedUser.email,
-            city: request.city,
-            location: request.location,
-            urgency: request.urgency,
-            message: request.message,
-            contactInfo: request.contactInfo,
-            estimatedTime: request.estimatedTime,
-            status: request.status,
-            tokenCost: request.tokenCost,
-            createdAt: request.createdAt
-          },
-          timestamp: new Date().toISOString()
+        io.to(roomName).emit('charging-request', {
+          id: request._id,
+          requesterId: request.requesterId,
+          requesterName: updatedUser.name,
+          requesterEmail: updatedUser.email,
+          city: request.city,
+          location: request.location,
+          urgency: request.urgency,
+          message: request.message,
+          contactInfo: request.contactInfo,
+          estimatedTime: request.estimatedTime,
+          status: request.status,
+          tokenCost: request.tokenCost,
+          createdAt: request.createdAt
         });
 
         console.log(`Charging request ${request._id} broadcasted to city room: ${roomName}`);
@@ -145,8 +135,8 @@ router.post("/requests", authMiddleware, async (req, res) => {
       res.status(201).json({
         success: true,
         message: "Charging request created successfully",
-        request: {
-          id: request._id,
+        charging: {
+          _id: request._id,
           requesterId: request.requesterId,
           city: request.city,
           status: request.status,
@@ -154,23 +144,16 @@ router.post("/requests", authMiddleware, async (req, res) => {
           urgency: request.urgency,
           message: request.message,
           contactInfo: request.contactInfo,
-          estimatedTime: request.estimatedTime,
+          estimatedTime: request.estimatedTime ?? timeAvailable ?? null,
           tokenCost: request.tokenCost,
           remainingTokens: updatedUser.tokenBalance,
           createdAt: request.createdAt
         }
       });
 
-    } catch (transactionError) {
-      // Abort transaction if any error occurs
-      await session.abortTransaction();
-      session.endSession();
-      
-      console.error("Transaction error:", transactionError);
-      
-      // If token deduction failed but request creation succeeded, we need to handle this
-      // In a real production environment, you might want to add compensation logic here
-      
+    } catch (error) {
+      console.error("Error creating charging request:", error);
+
       res.status(500).json({
         success: false,
         message: "Failed to create charging request. Please try again."
@@ -246,37 +229,60 @@ router.get("/requests", authMiddleware, async (req, res) => {
 
 /**
  * GET /api/charging/requests/city/:city
- * Get all OPEN charging requests in a specific city
+ * Get all OPEN charging requests from any city
+ * Requests from the user's city are prioritized and appear first
  * Requires authentication
  */
 router.get("/requests/city/:city", authMiddleware, async (req, res) => {
   try {
     const { city } = req.params;
+    const userCity = req.user.city;
     const { page = 1, limit = 10 } = req.query;
 
-    // Build query filter for open requests in the specified city
-    const filter = { 
-      city: city,
-      status: "OPEN"
-    };
+    console.log(`\n=== Fetching requests (prioritize city: "${city}", user city: "${userCity}") ===`);
+
+    // Get ALL open requests (from any city)
+    const filter = { status: "OPEN" };
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Get requests with pagination
+    // Fetch all open requests and sort:
+    // 1. Requests from user's city appear first
+    // 2. Then requests from other cities
+    // 3. Within each group, sort by most recent first
     const requests = await ChargingRequest.find(filter)
-      .populate('requesterId', 'name email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
+      .populate('requesterId', 'name email city')
+      .lean()
+      .then(reqs => {
+        // Sort with user's city first
+        return reqs.sort((a, b) => {
+          const aIsUserCity = a.city.toLowerCase() === userCity.toLowerCase() ? 1 : 0;
+          const bIsUserCity = b.city.toLowerCase() === userCity.toLowerCase() ? 1 : 0;
+          
+          // If both from same category (user city or not), sort by date
+          if (aIsUserCity === bIsUserCity) {
+            return new Date(b.createdAt) - new Date(a.createdAt);
+          }
+          
+          // User city first
+          return bIsUserCity - aIsUserCity;
+        });
+      });
 
-    // Get total count for pagination info
-    const total = await ChargingRequest.countDocuments(filter);
+    // Apply pagination after sorting
+    const paginatedRequests = requests.slice(skip, skip + parseInt(limit));
+    const total = requests.length;
+
+    console.log(`Found ${total} total OPEN requests`);
+    console.log(`Showing ${paginatedRequests.length} requests (page ${page})`);
 
     res.json({
       success: true,
-      requests: requests,
+      requests: paginatedRequests.map(req => ({
+        ...req,
+        isFromUserCity: req.city.toLowerCase() === userCity.toLowerCase()
+      })),
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / parseInt(limit)),
@@ -304,7 +310,7 @@ router.get("/requests/city/:city", authMiddleware, async (req, res) => {
 router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
   try {
     const { requestId } = req.params;
-    const helperId = req.user._id;
+    const helperId = req.user._id.toString();
 
     // Find and update the request
     const request = await ChargingRequest.findOneAndUpdate(
@@ -387,7 +393,7 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
 router.post("/requests/:requestId/complete", authMiddleware, async (req, res) => {
   try {
     const { requestId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
 
     // Find the request with populated user data
     const request = await ChargingRequest.findById(requestId)
@@ -417,10 +423,6 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
       });
     }
 
-    // Start a session for atomic operations
-    const session = await User.startSession();
-    session.startTransaction();
-
     try {
       const requesterId = request.requesterId._id;
       const helperId = request.helperId._id;
@@ -428,7 +430,7 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
       // Add tokens to helper (reward for completing the request)
       const updatedHelper = await User.findByIdAndUpdate(
         helperId,
-        { 
+        {
           $inc: { tokenBalance: TOKEN_COST },
           $push: {
             tokenHistory: {
@@ -439,9 +441,8 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
             }
           }
         },
-        { 
-          new: true, 
-          session,
+        {
+          new: true,
           select: 'tokenBalance name email'
         }
       );
@@ -453,7 +454,7 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
       // Record payment in requester's history (tokens were already deducted at creation)
       const updatedRequester = await User.findByIdAndUpdate(
         requesterId,
-        { 
+        {
           $push: {
             tokenHistory: {
               amount: -TOKEN_COST,
@@ -463,9 +464,8 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
             }
           }
         },
-        { 
-          new: true, 
-          session,
+        {
+          new: true,
           select: 'tokenBalance name email'
         }
       );
@@ -481,9 +481,8 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
           status: "COMPLETED",
           completedAt: new Date()
         },
-        { 
-          new: true, 
-          session,
+        {
+          new: true,
           populate: [
             { path: 'requesterId', select: 'name email city' },
             { path: 'helperId', select: 'name email city' }
@@ -494,10 +493,6 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
       if (!updatedRequest) {
         throw new Error("Failed to update request status");
       }
-
-      // Commit transaction
-      await session.commitTransaction();
-      session.endSession();
 
       console.log(`Charging request ${requestId} completed. Tokens transferred from ${requesterId} to ${helperId}`);
 
@@ -563,12 +558,9 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
         }
       });
 
-    } catch (transactionError) {
-      await session.abortTransaction();
-      session.endSession();
-      
-      console.error("Transaction error during request completion:", transactionError);
-      
+    } catch (error) {
+      console.error("Error completing charging request:", error);
+
       res.status(500).json({
         success: false,
         message: "Failed to complete charging request. Please try again."
@@ -594,7 +586,7 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
 router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
   try {
     const { requestId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
 
     // Find the request
     const request = await ChargingRequest.findById(requestId)
@@ -623,15 +615,11 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
       });
     }
 
-    // Start a session for atomic operations
-    const session = await User.startSession();
-    session.startTransaction();
-
     try {
       // Refund tokens to requester
       const updatedUser = await User.findByIdAndUpdate(
         request.requesterId._id,
-        { 
+        {
           $inc: { tokenBalance: TOKEN_COST },
           $push: {
             tokenHistory: {
@@ -642,9 +630,8 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
             }
           }
         },
-        { 
-          new: true, 
-          session,
+        {
+          new: true,
           select: 'tokenBalance name email'
         }
       );
@@ -660,9 +647,8 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
           status: "CANCELED",
           canceledAt: new Date()
         },
-        { 
-          new: true, 
-          session,
+        {
+          new: true,
           populate: { path: 'requesterId', select: 'name email city' }
         }
       );
@@ -670,10 +656,6 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
       if (!updatedRequest) {
         throw new Error("Failed to update request status");
       }
-
-      // Commit transaction
-      await session.commitTransaction();
-      session.endSession();
 
       console.log(`Charging request ${requestId} canceled. Tokens refunded to ${request.requesterId._id}`);
 
@@ -732,12 +714,9 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
         newBalance: updatedUser.tokenBalance
       });
 
-    } catch (transactionError) {
-      await session.abortTransaction();
-      session.endSession();
-      
-      console.error("Transaction error during request cancellation:", transactionError);
-      
+    } catch (error) {
+      console.error("Error canceling charging request:", error);
+
       res.status(500).json({
         success: false,
         message: "Failed to cancel charging request. Please try again."

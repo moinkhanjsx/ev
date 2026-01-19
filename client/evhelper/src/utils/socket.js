@@ -12,17 +12,32 @@ class SocketService {
    * @param {string} city - User's city for room joining
    * @param {string} token - Authentication token (optional)
    */
-  connect(serverUrl = 'http://localhost:5000', city = null, token = null) {
+  connect(serverUrl = null, city = null, token = null) {
+    // Auto-detect server URL based on environment
+    if (!serverUrl) {
+      serverUrl = process.env.NODE_ENV === 'production' 
+        ? window.location.origin 
+        : 'http://localhost:5000';
+    }
     if (this.socket && this.connected) {
       console.log('Socket already connected');
       return this.socket;
+    }
+
+    // Disconnect any existing socket before creating new one
+    if (this.socket) {
+      this.socket.disconnect();
     }
 
     // Configure socket options
     const options = {
       transports: ['websocket', 'polling'],
       timeout: 20000,
-      forceNew: true
+      forceNew: true,
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 5
     };
 
     // Add authentication if token provided
@@ -32,32 +47,37 @@ class SocketService {
       };
     }
 
-    this.socket = io(serverUrl, options);
+    try {
+      this.socket = io(serverUrl, options);
 
-    // Connection events
-    this.socket.on('connect', () => {
-      this.connected = true;
-      console.log('Connected to socket server with ID:', this.socket.id);
-      
-      // Join city room if city provided
-      if (city) {
-        this.joinCity(city);
-      }
-    });
+      // Connection events
+      this.socket.on('connect', () => {
+        this.connected = true;
+        console.log('Connected to socket server with ID:', this.socket.id);
+        
+        // Join city room if city provided
+        if (city) {
+          this.joinCity(city);
+        }
+      });
 
-    this.socket.on('disconnect', (reason) => {
-      this.connected = false;
-      console.log('Disconnected from socket server:', reason);
-    });
+      this.socket.on('disconnect', (reason) => {
+        this.connected = false;
+        console.log('Disconnected from socket server:', reason);
+      });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
+      this.socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
 
-    // Built-in event handlers
-    this.setupEventHandlers();
+      // Built-in event handlers
+      this.setupEventHandlers();
 
-    return this.socket;
+      return this.socket;
+    } catch (error) {
+      console.error('Error initializing socket connection:', error);
+      return null;
+    }
   }
 
   /**
