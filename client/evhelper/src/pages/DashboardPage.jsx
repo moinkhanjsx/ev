@@ -59,6 +59,8 @@ const DashboardPage = () => {
     setError(null);
 
     try {
+      // CRITICAL FIX: Fetch user's own requests, not all requests
+      // This should show requests created by the current user only
       const response = await api.get('/charging/requests');
       
       if (response.data.success) {
@@ -70,6 +72,22 @@ const DashboardPage = () => {
       setError(err.response?.data?.message || 'Failed to fetch your requests');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCityRequests = async () => {
+    if (!state.user?.city) return;
+    
+    try {
+      // Fetch requests from user's city for the "Active Requests" section
+      const response = await api.get(`/charging/requests/city/${state.user.city}`);
+      
+      if (response.data.success) {
+        // This could be used to show city requests in a separate section
+        console.log('City requests for dashboard:', response.data.requests);
+      }
+    } catch (err) {
+      console.error('Failed to fetch city requests:', err);
     }
   };
 
@@ -267,12 +285,8 @@ const DashboardPage = () => {
                         {/* Action buttons based on status */}
                         {request.status === 'OPEN' && (
                           <div className="space-x-2">
-                            <button 
-                              onClick={() => handleAcceptRequest(request._id)}
-                              className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-green-600 bg-white hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                            >
-                              Accept Request
-                            </button>
+                            {/* CRITICAL FIX: Don't show Accept button for own requests */}
+                            {/* Only show Cancel button for user's own requests */}
                             <button 
                               onClick={() => handleCancelRequest(request._id)}
                               className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-red-600 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"

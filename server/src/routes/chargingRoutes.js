@@ -229,8 +229,8 @@ router.get("/requests", authMiddleware, async (req, res) => {
 
 /**
  * GET /api/charging/requests/city/:city
- * Get all OPEN charging requests from any city
- * Requests from the user's city are prioritized and appear first
+ * Get OPEN charging requests from the specified city ONLY
+ * This endpoint should only show requests from the user's city
  * Requires authentication
  */
 router.get("/requests/city/:city", authMiddleware, async (req, res) => {
@@ -239,47 +239,35 @@ router.get("/requests/city/:city", authMiddleware, async (req, res) => {
     const userCity = req.user.city;
     const { page = 1, limit = 10 } = req.query;
 
-    console.log(`\n=== Fetching requests (prioritize city: "${city}", user city: "${userCity}") ===`);
+    console.log(`\n=== Fetching requests for city: "${city}", user city: "${userCity}" ===`);
 
-    // Get ALL open requests (from any city)
-    const filter = { status: "OPEN" };
+    // CRITICAL FIX: Only get requests from the specified city
+    // Use case-insensitive regex to handle city name variations
+    const filter = { 
+      status: "OPEN",
+      city: { $regex: `^${city}$`, $options: 'i' }
+    };
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Fetch all open requests and sort:
-    // 1. Requests from user's city appear first
-    // 2. Then requests from other cities
-    // 3. Within each group, sort by most recent first
+    // Fetch open requests from the specified city only
     const requests = await ChargingRequest.find(filter)
       .populate('requesterId', 'name email city')
-      .lean()
-      .then(reqs => {
-        // Sort with user's city first
-        return reqs.sort((a, b) => {
-          const aIsUserCity = a.city.toLowerCase() === userCity.toLowerCase() ? 1 : 0;
-          const bIsUserCity = b.city.toLowerCase() === userCity.toLowerCase() ? 1 : 0;
-          
-          // If both from same category (user city or not), sort by date
-          if (aIsUserCity === bIsUserCity) {
-            return new Date(b.createdAt) - new Date(a.createdAt);
-          }
-          
-          // User city first
-          return bIsUserCity - aIsUserCity;
-        });
-      });
+      .sort({ createdAt: -1 }) // Sort by most recent first
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
 
-    // Apply pagination after sorting
-    const paginatedRequests = requests.slice(skip, skip + parseInt(limit));
-    const total = requests.length;
+    // Get total count for pagination
+    const total = await ChargingRequest.countDocuments(filter);
 
-    console.log(`Found ${total} total OPEN requests`);
-    console.log(`Showing ${paginatedRequests.length} requests (page ${page})`);
+    console.log(`Found ${total} OPEN requests in city "${city}"`);
+    console.log(`Showing ${requests.length} requests (page ${page})`);
 
     res.json({
       success: true,
-      requests: paginatedRequests.map(req => ({
+      requests: requests.map(req => ({
         ...req,
         isFromUserCity: req.city.toLowerCase() === userCity.toLowerCase()
       })),
