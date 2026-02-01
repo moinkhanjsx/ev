@@ -262,7 +262,7 @@ const DashboardPage = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="ev-grid-2 ev-card-spacing ev-mobile-stack">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
           <a
             href="/charging-request"
             className="ev-glass-card group cursor-pointer transition-all duration-300 hover:scale-105"
@@ -310,21 +310,21 @@ const DashboardPage = () => {
 
         {/* User Info Card */}
         <div className="ev-glass-card mb-8">
-          <div className="p-6 lg:p-8">
-            <div className="flex items-center gap-6">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
               <div className="shrink-0">
-                <div className="w-20 h-20 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-2xl">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-xl sm:text-2xl">
                     {state.user?.name?.charAt(0) || 'U'}
                   </span>
                 </div>
               </div>
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-white">{state.user?.name}</h2>
-                <p className="text-gray-400">{state.user?.email}</p>
-                <p className="text-gray-400">{state.user?.city}</p>
+              <div className="flex-1 text-center sm:text-left">
+                <h2 className="text-xl sm:text-2xl font-bold text-white">{state.user?.name}</h2>
+                <p className="text-gray-400 text-sm sm:text-base">{state.user?.email}</p>
+                <p className="text-gray-400 text-sm sm:text-base">{state.user?.city}</p>
                 <div className="mt-2 inline-flex items-center px-3 py-1 bg-cyan-500/20 border border-cyan-500/50 rounded-full">
-                  <span className="text-cyan-300 text-sm font-medium">Token Balance: {state.user?.tokenBalance || 0}</span>
+                  <span className="text-cyan-300 text-xs sm:text-sm font-medium">Token Balance: {state.user?.tokenBalance || 0}</span>
                 </div>
               </div>
             </div>
@@ -426,10 +426,10 @@ const DashboardPage = () => {
                          
                         {/* Action buttons based on status */}
                         {request.status === 'OPEN' && (
-                          <div className="space-x-2">
+                          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2">
                             <button 
                               onClick={() => handleCancelRequest(request._id)}
-                              className="px-4 py-2 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg hover:bg-red-500/30 transition-colors"
+                              className="w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg hover:bg-red-500/30 transition-colors text-sm sm:text-base"
                             >
                               Cancel Request
                             </button>
@@ -437,14 +437,14 @@ const DashboardPage = () => {
                         )}
 
                         {request.status === 'ACCEPTED' && (
-                          <div className="space-x-2">
+                          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:items-center">
                             <button 
                               onClick={() => handleCompleteRequest(request._id)}
-                              className="px-4 py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors"
+                              className="w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors text-sm sm:text-base"
                             >
                               Mark as Completed
                             </button>
-                            <span className="text-sm text-gray-400">
+                            <span className="text-xs sm:text-sm text-gray-400 sm:ml-2">
                               Waiting for completion...
                             </span>
                           </div>

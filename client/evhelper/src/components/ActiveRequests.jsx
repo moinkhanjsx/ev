@@ -190,48 +190,48 @@ const ActiveRequests = () => {
             ) : (
               <div className="space-y-4">
                 {requests.map((request) => (
-                  <div key={request._id} className="ev-glass-card p-6 hover:scale-[1.02] transition-transform duration-300">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-4">
-                          <div className="text-3xl">{getStatusIcon(request.status)}</div>
-                          <div className="flex flex-col gap-2">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(request.status)}`}>
+                  <div key={request._id} className="ev-glass-card p-4 sm:p-6 hover:scale-[1.02] transition-transform duration-300">
+                    <div className="flex flex-col lg:flex-row items-start justify-between gap-4 lg:gap-6">
+                      <div className="flex-1 lg:w-1/2">
+                        <div className="flex items-center gap-2 sm:gap-3 mb-4">
+                          <div className="text-2xl sm:text-3xl">{getStatusIcon(request.status)}</div>
+                          <div className="flex flex-col gap-1 sm:gap-2">
+                            <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(request.status)}`}>
                               {request.status}
                             </span>
                             {isMyRequest(request) && (
-                              <span className="px-2 py-1 text-xs font-semibold bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded">
+                              <span className="px-1 sm:px-2 py-1 text-xs font-semibold bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded">
                                 Your Request
                               </span>
                             )}
-                            <span className={`px-2 py-1 text-xs font-semibold rounded ${getUrgencyColor(request.urgency)}`}>
+                            <span className={`px-1 sm:px-2 py-1 text-xs font-semibold rounded ${getUrgencyColor(request.urgency)}`}>
                               {request.urgency?.toUpperCase()} PRIORITY
                             </span>
                           </div>
                         </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3 lg:gap-4 mb-4">
                           <div>
-                            <h4 className="text-sm font-medium text-gray-300 mb-1">📍 Location</h4>
-                            <p className="text-gray-400">{request.location}</p>
+                            <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-1">📍 Location</h4>
+                            <p className="text-xs sm:text-sm text-gray-400">{request.location}</p>
                           </div>
                           <div>
-                            <h4 className="text-sm font-medium text-gray-300 mb-1">📞 Contact</h4>
-                            <p className="text-gray-400">{request.phoneNumber || request.contactInfo}</p>
+                            <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-1">📞 Contact</h4>
+                            <p className="text-xs sm:text-sm text-gray-400">{request.phoneNumber || request.contactInfo}</p>
                           </div>
                         </div>
 
                         {request.message && (
                           <div className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-300 mb-1">💬 Message</h4>
-                            <p className="text-gray-400">{request.message}</p>
+                            <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-1">💬 Message</h4>
+                            <p className="text-xs sm:text-sm text-gray-400 wrap-break-words">{request.message}</p>
                           </div>
                         )}
 
-                        <div className="flex items-center gap-4 text-sm text-gray-400">
+                        <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400 mb-4">
                           <span>🕒 {new Date(request.createdAt).toLocaleString()}</span>
                           {request.estimatedTime && (
-                            <span>⏱️ ~{request.estimatedTime} min</span>
+                            <span className="sm:ml-2">⏱️ ~{request.estimatedTime} min</span>
                           )}
                         </div>
                       </div>
@@ -240,7 +240,7 @@ const ActiveRequests = () => {
                       {request.status === 'OPEN' && !isMyRequest(request) && (
                         <button
                           onClick={() => handleAcceptRequest(request._id)}
-                          className="ev-neon-button px-6 py-3 ev-charging-pulse"
+                          className="ev-neon-button w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ev-charging-pulse"
                         >
                           Accept Request
                         </button>
