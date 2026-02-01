@@ -2,11 +2,14 @@ import React, { useContext, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api, { authAPI } from '../utils/auth.js';
 import socketService from '../utils/socket.js';
+import AcceptedRequestsList from '../components/AcceptedRequestsList';
 
 const DashboardPage = () => {
   const { state, actions } = useAuth();
   const [requests, setRequests] = React.useState([]);
+  const [acceptedRequests, setAcceptedRequests] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [helperLoading, setHelperLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
 
   useEffect(() => {
@@ -25,6 +28,8 @@ const DashboardPage = () => {
         setRequests(prev => prev.map(req => 
           req._id === data.requestId ? { ...req, status: 'ACCEPTED' } : req
         ));
+        // Refresh helper's accepted requests when they accept a request
+        fetchAcceptedRequests();
       });
 
       socketService.on('request-completed', (data) => {
@@ -32,6 +37,8 @@ const DashboardPage = () => {
         setRequests(prev => prev.map(req => 
           req._id === data.requestId ? { ...req, status: 'COMPLETED' } : req
         ));
+        // Refresh helper's accepted requests when a request is completed
+        fetchAcceptedRequests();
       });
 
       socketService.on('request-canceled', (data) => {
@@ -39,6 +46,8 @@ const DashboardPage = () => {
         setRequests(prev => prev.map(req => 
           req._id === data.requestId ? { ...req, status: 'CANCELED' } : req
         ));
+        // Refresh helper's accepted requests when a request is canceled
+        fetchAcceptedRequests();
       });
 
       socketService.on('request-accepted-notification', (data) => {
@@ -51,6 +60,7 @@ const DashboardPage = () => {
 
       // Initial load
       fetchRequests();
+      fetchAcceptedRequests();
     }
   }, [state.isAuthenticated, state.user?.city]);
 
@@ -70,6 +80,58 @@ const DashboardPage = () => {
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch your requests');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAcceptedRequests = async () => {
+    if (!state.isAuthenticated) {
+      return [];
+    }
+
+    setHelperLoading(true);
+
+    try {
+      // Fetch requests where current user is the helper
+      const response = await api.get('/charging/requests/helper');
+      
+      if (response.data.success) {
+        setAcceptedRequests(response.data.requests || []);
+      } else {
+        console.error('Failed to fetch accepted requests:', response.data.message);
+        setAcceptedRequests([]);
+      }
+    } catch (err) {
+      console.error('Error fetching accepted requests:', err.response?.data?.message || err.message);
+      setAcceptedRequests([]);
+    } finally {
+      setHelperLoading(false);
+    }
+  };
+
+  const fetchHelperRequests = async () => {
+    if (!state.isAuthenticated) {
+      setError('Please log in to view your accepted requests');
+      return [];
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Fetch requests where current user is the helper
+      const response = await api.get('/charging/requests/helper');
+      
+      if (response.data.success) {
+        return response.data.requests || [];
+      } else {
+        setError(response.data.message || 'Failed to fetch your accepted requests');
+        return [];
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch your accepted requests');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -132,6 +194,7 @@ const DashboardPage = () => {
       if (response.data.success) {
         alert('Request marked as completed successfully!');
         fetchRequests(); // Refresh the requests list
+        fetchAcceptedRequests(); // Refresh helper's accepted requests
       } else {
         alert(response.data.message || 'Failed to mark request as completed');
       }
@@ -400,6 +463,26 @@ const DashboardPage = () => {
             )}
           </div>
         </div>
+
+        {/* Helper's Accepted Requests Section */}
+        {acceptedRequests.length > 0 && (
+          <div className="ev-glass-card mt-8">
+            <div className="p-6 lg:p-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Your Active Helper Requests</h2>
+              
+              {helperLoading ? (
+                <div className="text-center py-12">
+                  <div className="ev-loading mx-auto mb-4"></div>
+                  <p className="text-gray-400">Loading your accepted requests...</p>
+                </div>
+              ) : (
+                <AcceptedRequestsList 
+                  requests={acceptedRequests} 
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

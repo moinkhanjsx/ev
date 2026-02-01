@@ -955,4 +955,56 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
   }
 });
 
+/**
+ * GET /api/charging/requests/helper
+ * Get all ACCEPTED charging requests for the authenticated helper
+ * Requires authentication
+ */
+router.get("/requests/helper", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { page = 1, limit = 10 } = req.query;
+
+    // Build query filter for helper's accepted requests
+    const filter = { 
+      helperId: userId, 
+      status: "ACCEPTED"
+    };
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Get accepted requests with pagination
+    const requests = await ChargingRequest.find(filter)
+      .populate('requesterId', 'name email city location urgency phoneNumber')
+      .sort({ acceptedAt: -1 }) // Most recently accepted first
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Get total count for pagination
+    const total = await ChargingRequest.countDocuments(filter);
+
+    res.json({
+      success: true,
+      requests: requests,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
+        totalRequests: total,
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching helper requests:", error);
+    
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while fetching helper requests"
+    });
+  }
+});
+
 export default router;
