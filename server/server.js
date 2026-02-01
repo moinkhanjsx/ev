@@ -169,7 +169,7 @@ socket.on("charging-request", (requestData) => {
   });
 
   /**
- * Handle accepting charging requests with race condition protection
+ * Handle accepting charging requests with race condition protection and duplicate prevention
  * Event: 'accept-charging-request'
  * Data: { requestId: string }
  */
@@ -188,13 +188,36 @@ socket.on("accept-charging-request", async (data) => {
         return;
       }
 
+      // SAFETY CHECK: Verify helper is not already active on another request
       try {
-        // Find and update request
+        const helper = await User.findById(helperId);
+        if (!helper) {
+          socket.emit("error", { message: "Helper user not found" });
+          return;
+        }
+
+        if (helper.isActiveHelper && helper.currentActiveRequest) {
+          socket.emit("accept-failed", {
+            requestId: requestId,
+            reason: "You already have an active charging request. Please complete it before accepting another.",
+            currentActiveRequest: helper.currentActiveRequest
+          });
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking helper status:", error);
+        socket.emit("error", { message: "Failed to verify helper status" });
+        return;
+      }
+
+      try {
+        // Find and update request with atomic operation and additional constraints
         const request = await ChargingRequest.findOneAndUpdate(
           {
             _id: requestId,
             status: "OPEN", // Only accept OPEN requests
-            requesterId: { $ne: helperId } // Prevent accepting own request
+            requesterId: { $ne: helperId }, // Prevent accepting own request
+            helperId: { $eq: null } // Ensure no helper is assigned yet
           },
           {
             $set: {
@@ -205,35 +228,51 @@ socket.on("accept-charging-request", async (data) => {
           },
           {
             new: true,
-            returnDocument: "after"
+            runValidators: true
           }
         ).populate('requesterId helperId', 'name email city');
 
         if (!request) {
-          
-          // Check if request exists but is already accepted
+          // Check why the update failed for better error messaging
           const existingRequest = await ChargingRequest.findById(requestId);
-          if (existingRequest) {
-            if (existingRequest.status !== "OPEN") {
-              socket.emit("accept-failed", {
-                requestId: requestId,
-                reason: "Request already accepted or completed",
-                status: existingRequest.status
-              });
-            } else if (existingRequest.requesterId.toString() === helperId) {
-              socket.emit("accept-failed", {
-                requestId: requestId,
-                reason: "Cannot accept your own request"
-              });
-            }
+          if (!existingRequest) {
+            socket.emit("accept-failed", {
+              requestId: requestId,
+              reason: "Request not found"
+            });
+          } else if (existingRequest.status !== "OPEN") {
+            socket.emit("accept-failed", {
+              requestId: requestId,
+              reason: `This request is no longer available (status: ${existingRequest.status})`,
+              status: existingRequest.status
+            });
+          } else if (existingRequest.requesterId.toString() === helperId) {
+            socket.emit("accept-failed", {
+              requestId: requestId,
+              reason: "You cannot accept your own charging request"
+            });
+          } else if (existingRequest.helperId) {
+            socket.emit("accept-failed", {
+              requestId: requestId,
+              reason: "This request has already been accepted by another helper"
+            });
           } else {
-              socket.emit("accept-failed", {
-                requestId: requestId,
-                reason: "Request not found"
-              });
+            socket.emit("accept-failed", {
+              requestId: requestId,
+              reason: "Unable to accept request at this time. Please try again."
+            });
           }
           return;
         }
+
+        // SAFETY CHECK: Update helper status atomically
+        await User.findByIdAndUpdate(
+          helperId,
+          {
+            isActiveHelper: true,
+            currentActiveRequest: requestId
+          }
+        );
 
         console.log(`Charging request ${requestId} accepted by helper ${helperId}`);
 
@@ -246,7 +285,6 @@ socket.on("accept-charging-request", async (data) => {
             helperId: request.helperId._id,
             helperName: request.helperId.name,
             helperEmail: request.helperId.email,
-            helperCity: request.helperId.city,
             status: request.status,
             acceptedAt: request.acceptedAt
           },

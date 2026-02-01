@@ -9,6 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // 10 second timeout
 });
 
 // Request interceptor to automatically attach JWT token
@@ -28,7 +29,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle token expiration
+// Response interceptor to handle token expiration and improve error handling
 api.interceptors.response.use(
   (response) => {
     // Handle 401 responses (token expired)
@@ -36,6 +37,15 @@ api.interceptors.response.use(
       localStorage.removeItem('evhelper_token');
       localStorage.removeItem('evhelper_user');
       window.location.href = '/login';
+    }
+    
+    // SAFETY CHECK: Log response for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('API Response:', {
+        url: response.config.url,
+        status: response.status,
+        data: response.data
+      });
     }
     
     return response;
@@ -48,6 +58,16 @@ api.interceptors.response.use(
       localStorage.removeItem('evhelper_token');
       localStorage.removeItem('evhelper_user');
       window.location.href = '/login';
+    }
+    
+    // SAFETY CHECK: Enhanced error logging for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.error('API Error Details:', {
+        url: error.config?.url,
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
     }
     
     return Promise.reject(error);

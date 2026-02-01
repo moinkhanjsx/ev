@@ -309,26 +309,85 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
     const { requestId } = req.params;
     const helperId = req.user._id.toString();
 
-    // Find and update the request
+    // SAFETY CHECK: Verify helper is not already active on another request
+    const helper = await User.findById(helperId);
+    if (!helper) {
+      return res.status(404).json({
+        success: false,
+        message: "Helper user not found"
+      });
+    }
+
+    if (helper.isActiveHelper && helper.currentActiveRequest) {
+      return res.status(400).json({
+        success: false,
+        message: "You already have an active charging request. Please complete it before accepting another.",
+        currentActiveRequest: helper.currentActiveRequest
+      });
+    }
+
+    // SAFETY CHECK: Use atomic operation with additional constraints to prevent race conditions
     const request = await ChargingRequest.findOneAndUpdate(
       { 
         _id: requestId, 
         status: "OPEN",
-        requesterId: { $ne: helperId } // Prevent accepting own request
+        requesterId: { $ne: helperId }, // Prevent accepting own request
+        helperId: { $eq: null } // Ensure no helper is assigned yet
       },
       { 
         helperId: helperId,
         status: "ACCEPTED",
         acceptedAt: new Date()
       },
-      { new: true }
+      { 
+        new: true,
+        runValidators: true
+      }
     ).populate('requesterId helperId', 'name email city');
 
     if (!request) {
-      return res.status(404).json({
-        success: false,
-        message: "Charging request not found or cannot be accepted"
-      });
+      // Check why the update failed for better error messaging
+      const existingRequest = await ChargingRequest.findById(requestId);
+      if (!existingRequest) {
+        return res.status(404).json({
+          success: false,
+          message: "Charging request not found"
+        });
+      } else if (existingRequest.status !== "OPEN") {
+        return res.status(400).json({
+          success: false,
+          message: `This request is no longer available (status: ${existingRequest.status})`
+        });
+      } else if (existingRequest.requesterId.toString() === helperId) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot accept your own charging request"
+        });
+      } else if (existingRequest.helperId) {
+        return res.status(400).json({
+          success: false,
+          message: "This request has already been accepted by another helper"
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Unable to accept request at this time. Please try again."
+        });
+      }
+    }
+
+    // SAFETY CHECK: Update helper status atomically
+    const updatedHelper = await User.findByIdAndUpdate(
+      helperId,
+      {
+        isActiveHelper: true,
+        currentActiveRequest: requestId
+      },
+      { new: true }
+    );
+
+    if (!updatedHelper) {
+      throw new Error("Failed to update helper status");
     }
 
     // Emit real-time event to requester
@@ -490,6 +549,15 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
       if (!updatedRequest) {
         throw new Error("Failed to update request status");
       }
+
+      // SAFETY CHECK: Reset helper status to allow new requests
+      await User.findByIdAndUpdate(
+        helperId,
+        {
+          isActiveHelper: false,
+          currentActiveRequest: null
+        }
+      );
 
       console.log(`Charging request ${requestId} completed. Tokens transferred from ${requesterId} to ${helperId}`);
 
@@ -654,6 +722,17 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
         throw new Error("Failed to update request status");
       }
 
+      // SAFETY CHECK: Reset helper status if request was accepted
+      if (request.helperId) {
+        await User.findByIdAndUpdate(
+          request.helperId._id,
+          {
+            isActiveHelper: false,
+            currentActiveRequest: null
+          }
+        );
+      }
+
       console.log(`Charging request ${requestId} canceled. Tokens refunded to ${request.requesterId._id}`);
 
       // Emit real-time notifications
@@ -787,6 +866,17 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
 
       if (!updatedRequest) {
         throw new Error("Failed to update request status");
+      }
+
+      // SAFETY CHECK: Reset helper status to allow new requests
+      if (request.helperId) {
+        await User.findByIdAndUpdate(
+          request.helperId._id,
+          {
+            isActiveHelper: false,
+            currentActiveRequest: null
+          }
+        );
       }
 
       console.log(`Charging request ${requestId} marked as completed by requester`);

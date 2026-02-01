@@ -81,6 +81,11 @@ const chargingRequestSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    canceledAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -58,6 +58,17 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    isActiveHelper: {
+      type: Boolean,
+      default: false,
+    },
+
+    currentActiveRequest: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChargingRequest",
+      default: null,
+    },
   },
   {
     timestamps: true,

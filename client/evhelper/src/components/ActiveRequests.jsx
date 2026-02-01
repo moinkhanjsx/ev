@@ -54,6 +54,13 @@ const ActiveRequests = () => {
 
   const handleAcceptRequest = async (requestId) => {
     try {
+      // SAFETY CHECK: Prevent duplicate clicks
+      const acceptButton = document.querySelector(`[onclick*="${requestId}"]`);
+      if (acceptButton) {
+        acceptButton.disabled = true;
+        acceptButton.textContent = 'Accepting...';
+      }
+
       const response = await api.post(`/charging/requests/${requestId}/accept`);
       
       if (response.data.success) {
@@ -63,7 +70,18 @@ const ActiveRequests = () => {
         alert(response.data.message || 'Failed to accept request');
       }
     } catch (error) {
-      alert(error.response?.data?.message || error.message || 'Failed to accept request');
+      console.error('Error accepting request:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to accept request';
+      alert(errorMessage);
+    } finally {
+      // SAFETY CHECK: Re-enable button after request completes
+      setTimeout(() => {
+        const acceptButton = document.querySelector(`[onclick*="${requestId}"]`);
+        if (acceptButton) {
+          acceptButton.disabled = false;
+          acceptButton.textContent = 'Accept Request';
+        }
+      }, 1000);
     }
   };
 
