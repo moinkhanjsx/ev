@@ -33,7 +33,9 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 // Serve static HTML files from public folder
-app.use(express.static(path.join(__dirname, '../public')));
+const publicPath = path.join(__dirname, '../public');
+console.log('Serving static files from:', publicPath);
+app.use(express.static(publicPath));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/charging", chargingRoutes);
