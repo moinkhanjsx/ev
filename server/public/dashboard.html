@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - EV Helper</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .navbar h1 {
+            font-size: 24px;
+        }
+        .navbar button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .user-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .info-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .info-item h3 {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        .info-item p {
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .action-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            display: block;
+            transition: opacity 0.3s;
+        }
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+        .request-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .request-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .request-status {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-open {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-accepted {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            color: #e74c3c;
+            background: #fadbd8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>⚡ EV Helper Dashboard</h1>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <div class="container">
+        <div id="errorMessage" class="error" style="display: none;"></div>
+
+        <div class="card">
+            <h2>Your Profile</h2>
+            <div class="user-info">
+                <div class="info-item">
+                    <h3>Name</h3>
+                    <p id="userName">-</p>
+                </div>
+                <div class="info-item">
+                    <h3>Email</h3>
+                    <p id="userEmail">-</p>
+                </div>
+                <div class="info-item">
+                    <h3>City</h3>
+                    <p id="userCity">-</p>
+                </div>
+                <div class="info-item">
+                    <h3>Token Balance</h3>
+                    <p id="tokenBalance">-</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Quick Actions</h2>
+            <div class="actions">
+                <button class="action-btn" onclick="window.location.href='/charging-request.html'">
+                    ➕ Create Charging Request
+                </button>
+                <button class="action-btn" onclick="window.location.href='/active-requests.html'">
+                    📋 View Active Requests
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Your Recent Requests</h2>
+            <div id="requestsList" class="loading">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+        function getUser() {
+            const user = localStorage.getItem('user');
+            return user ? JSON.parse(user) : null;
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+        }
+
+        async function loadDashboard() {
+            const user = getUser();
+            const token = getToken();
+
+            if (!token || !user) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            // Display user info
+            document.getElementById('userName').textContent = user.name;
+            document.getElementById('userEmail').textContent = user.email;
+            document.getElementById('userCity').textContent = user.city;
+            document.getElementById('tokenBalance').textContent = user.tokenBalance || 50;
+
+            // Load requests
+            try {
+                const response = await fetch(`${API_URL}/charging/requests`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+
+                if (data.success && data.requests.length > 0) {
+                    const requestsList = document.getElementById('requestsList');
+                    requestsList.innerHTML = data.requests.slice(0, 5).map(req => `
+                        <div class="request-item">
+                            <div class="request-header">
+                                <div>
+                                    <strong>${req.location}</strong>
+                                    <p style="color: #666; font-size: 14px; margin-top: 5px;">
+                                        Urgency: ${req.urgency.toUpperCase()}
+                                    </p>
+                                </div>
+                                <span class="request-status status-${req.status.toLowerCase()}">
+                                    ${req.status}
+                                </span>
+                            </div>
+                            <p style="color: #888; font-size: 13px;">
+                                Created: ${new Date(req.createdAt).toLocaleDateString()}
+                            </p>
+                        </div>
+                    `).join('');
+                } else {
+                    document.getElementById('requestsList').innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No charging requests yet</p>';
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').style.display = 'block';
+                document.getElementById('errorMessage').textContent = 'Error loading requests: ' + error.message;
+            }
+        }
+
+        // Load on page load
+        loadDashboard();
+    </script>
+</body>
+</html>

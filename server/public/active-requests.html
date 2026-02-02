@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Requests - EV Helper</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .navbar h1 {
+            font-size: 24px;
+        }
+        .navbar a, .navbar button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .request-card {
+            background: white;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .request-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+        .request-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        .request-status {
+            display: inline-block;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-open {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-accepted {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .request-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .detail-item {
+            font-size: 14px;
+        }
+        .detail-label {
+            color: #999;
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .detail-value {
+            color: #333;
+            font-size: 15px;
+            font-weight: 500;
+        }
+        .request-message {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 3px solid #667eea;
+            color: #555;
+            font-size: 14px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: opacity 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+        }
+        .btn-secondary {
+            background: #ddd;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #ccc;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #f5c6cb;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>⚡ Active Requests</h1>
+        <div>
+            <a href="/charging-request.html" style="margin-right: 10px;">➕ New Request</a>
+            <a href="/dashboard.html">← Dashboard</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="errorMessage"></div>
+        <div class="card">
+            <h2>Available Requests</h2>
+            <div id="requestsList" class="loading">Loading requests...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+        function getUser() {
+            const user = localStorage.getItem('user');
+            return user ? JSON.parse(user) : null;
+        }
+
+        async function loadRequests() {
+            const token = getToken();
+            const user = getUser();
+
+            if (!token || !user) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/charging/requests`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+
+                const requestsList = document.getElementById('requestsList');
+
+                if (data.success && data.requests.length > 0) {
+                    requestsList.innerHTML = data.requests.map(req => {
+                        const isOwner = req.requesterId === user.id;
+                        const isOpen = req.status === 'OPEN';
+                        const isAccepted = req.status === 'ACCEPTED';
+
+                        return `
+                            <div class="request-card">
+                                <div class="request-header">
+                                    <div>
+                                        <div class="request-title">${req.location}</div>
+                                    </div>
+                                    <span class="request-status status-${req.status.toLowerCase()}">
+                                        ${req.status}
+                                    </span>
+                                </div>
+
+                                <div class="request-details">
+                                    <div class="detail-item">
+                                        <div class="detail-label">Urgency</div>
+                                        <div class="detail-value">${req.urgency.toUpperCase()}</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="detail-label">Location</div>
+                                        <div class="detail-value">${req.location}</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="detail-label">Contact</div>
+                                        <div class="detail-value">${req.phoneNumber}</div>
+                                    </div>
+                                    <div class="detail-item">
+                                        <div class="detail-label">Created</div>
+                                        <div class="detail-value">${new Date(req.createdAt).toLocaleDateString()}</div>
+                                    </div>
+                                    ${req.message ? `
+                                        <div class="detail-item">
+                                            <div class="detail-label">Message</div>
+                                            <div class="detail-value">${req.message}</div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+
+                                ${isOpen && !isOwner ? `
+                                    <div class="btn-group">
+                                        <button class="btn btn-primary" onclick="acceptRequest('${req._id}')">
+                                            ✓ Accept Request
+                                        </button>
+                                    </div>
+                                ` : ''}
+                                ${isAccepted && req.helperId === user.id ? `
+                                    <div class="btn-group">
+                                        <button class="btn btn-primary" onclick="completeRequest('${req._id}')">
+                                            ✓ Complete Request
+                                        </button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    requestsList.innerHTML = '<div class="empty">No active charging requests available</div>';
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').innerHTML = `<div class="error">Error loading requests: ${error.message}</div>`;
+            }
+        }
+
+        async function acceptRequest(requestId) {
+            const token = getToken();
+            try {
+                const response = await fetch(`${API_URL}/charging/requests/${requestId}/accept`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ Request accepted!');
+                    loadRequests();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function completeRequest(requestId) {
+            const token = getToken();
+            try {
+                const response = await fetch(`${API_URL}/charging/requests/${requestId}/complete`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ Request completed! You earned tokens!');
+                    loadRequests();
+                } else {
+                    alert('❌ ' + data.message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Load on page load
+        loadRequests();
+    </script>
+</body>
+</html>

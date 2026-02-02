@@ -32,31 +32,20 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Serve static files from the React app in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/evhelper/dist')));
-}
+// Serve static HTML files from public folder
+app.use(express.static(path.join(__dirname, '../public')));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/charging", chargingRoutes);
 
-// Serve React app for any non-API routes in production
-if (process.env.NODE_ENV === 'production') {
-  // Serve index.html for any non-API route (SPA fallback)
-  app.use((req, res, next) => {
-    // Don't serve index.html for API routes
-    if (req.path.startsWith('/api')) return next();
-    // Don't serve index.html for actual files (with extensions)
-    if (/\.\w+$/.test(req.path)) return next();
-    // Serve index.html for all other routes
-    res.sendFile(path.join(__dirname, '../../client/evhelper/dist/index.html'));
-  });
-} else {
-  // For dev mode, show API is running
-  app.get("/", (req, res) => {
-    res.send("API running");
-  });
-}
+// Fallback: Serve index.html for any unmatched routes (SPA-style)
+app.get('*', (req, res) => {
+  // Don't serve HTML for API requests - let them 404 naturally
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ message: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 
 // Example of protected routes using the auth middleware
 // Uncomment and modify these examples as needed:
