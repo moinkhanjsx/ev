@@ -8,6 +8,7 @@ import authMiddleware from "./middleware/auth.js";
 import User from "./models/User.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,8 +35,14 @@ app.use(express.json());
 
 // Serve static HTML files from public folder
 const publicPath = path.join(__dirname, '../public');
-console.log('Serving static files from:', publicPath);
-app.use(express.static(publicPath));
+console.log('DEBUG: __dirname =', __dirname);
+console.log('DEBUG: publicPath =', publicPath);
+console.log('DEBUG: public folder exists?', fs.existsSync(publicPath));
+app.use(express.static(publicPath, { 
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'public, max-age=3600');
+  }
+}));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/charging", chargingRoutes);
