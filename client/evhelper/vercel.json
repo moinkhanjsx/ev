@@ -5,10 +5,10 @@
   "buildEnv": {
     "VITE_API_URL": "https://evhelper.onrender.com/api"
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/(?!.*\\.).*$",
-      "dest": "/index.html"
+      "source": "/:path((?!.*\\.).*)",
+      "destination": "/index.html"
     }
   ]
 }
