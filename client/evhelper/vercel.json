@@ -4,5 +4,11 @@
   "outputDirectory": "dist",
   "buildEnv": {
     "VITE_API_URL": "https://evhelper.onrender.com/api"
-  }
+  },
+  "routes": [
+    {
+      "src": "^/(?!.*\\.).*$",
+      "dest": "/index.html"
+    }
+  ]
 }
