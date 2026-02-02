@@ -37,20 +37,24 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../client/evhelper/dist')));
 }
 
-app.get("/", (req, res) => {
-  res.send("API running");
-});
-
 app.use("/api/auth", authRoutes);
 app.use("/api/charging", chargingRoutes);
 
 // Serve React app for any non-API routes in production
 if (process.env.NODE_ENV === 'production') {
-  // Serve index.html for any non-API route. Using app.use avoids wildcard path
-  // patterns that are incompatible with Express 5's path-to-regexp upgrade.
+  // Serve index.html for any non-API route (SPA fallback)
   app.use((req, res, next) => {
+    // Don't serve index.html for API routes
     if (req.path.startsWith('/api')) return next();
+    // Don't serve index.html for actual files (with extensions)
+    if (/\.\w+$/.test(req.path)) return next();
+    // Serve index.html for all other routes
     res.sendFile(path.join(__dirname, '../../client/evhelper/dist/index.html'));
+  });
+} else {
+  // For dev mode, show API is running
+  app.get("/", (req, res) => {
+    res.send("API running");
   });
 }
 
