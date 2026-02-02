@@ -2,13 +2,7 @@
   "buildCommand": "cd client/evhelper && npm run build",
   "outputDirectory": "client/evhelper/dist",
   "framework": "vite",
-  "env": {
-    "VITE_API_URL": "@vite_api_url"
-  },
-  "rewrites": [
-    {
-      "source": "/:path((?!_next/static|_next/image|favicon.ico).*)",
-      "destination": "/index.html"
-    }
-  ]
+  "buildEnv": {
+    "VITE_API_URL": "https://evhelper.onrender.com/api"
+  }
 }
