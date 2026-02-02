@@ -16,4 +16,14 @@ export default defineConfig({
       },
     },
   },
-})
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: true,
+  },
+  define: {
+    'process.env.VITE_API_URL': JSON.stringify(process.env.NODE_ENV === 'production' 
+      ? '"https://evhelper.onrender.com/api"' 
+      : '"https://evhelper.onrender.com/api"')
+  }
+});
