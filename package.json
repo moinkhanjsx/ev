@@ -9,7 +9,9 @@
     "server:dev": "cd server && nodemon server.js",
     "client:dev": "cd client/evhelper && vite",
     "build": "cd client/evhelper && vite build",
-    "start": "node server/server.js",
+    "build:all": "npm run build && npm run setup:server",
+    "setup:server": "cd server && npm install",
+    "start": "npm run build && node server/server.js",
     "install-deps": "npm install && cd client/evhelper && npm install && cd ../../server && npm install",
     "setup": "npm run install-deps"
   },
