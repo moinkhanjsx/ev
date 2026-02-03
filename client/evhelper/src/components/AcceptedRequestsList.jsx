@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 
-const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
+const AcceptedRequestsList = ({ requests, onCompleteRequest, onOpenChat }) => {
   const { state } = useAuth();
   const getStatusClass = (status) => {
     switch (status) {
@@ -34,7 +34,7 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
   return (
     <div className="space-y-4">
       {requests.map((request) => (
-        <div key={request._id} className="ev-glass-card p-4 sm:p-6 hover:scale-[1.02] transition-transform duration-300">
+        <div key={request._id} className="ev-formal-card ev-formal-compact p-4 sm:p-6 hover:scale-[1.02] transition-transform duration-300">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-center gap-3">
               <div className="text-2xl sm:text-3xl">{getStatusIcon(request.status)}</div>
@@ -88,13 +88,20 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
               <div className="text-sm text-gray-400">
                 {request.tokenCost} tokens • Status: {request.status}
               </div>
+              <button
+                type="button"
+                onClick={() => onOpenChat?.(request)}
+                className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+              >
+                Open Chat
+              </button>
               
               {/* Action button for completing the request - only for original requester */}
               {request.status === 'ACCEPTED' && onCompleteRequest && 
                request.requesterId?._id === state.user?._id && (
                 <button
                   onClick={() => onCompleteRequest(request._id)}
-                  className="w-full sm:w-auto px-4 py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors"
+                  className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
                 >
                   Mark as Completed
                 </button>

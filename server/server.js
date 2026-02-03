@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import app from "./src/app.js";
 import ChargingRequest from './src/models/ChargingRequest.js';
 import User from './src/models/User.js';
+import RequestMessage from './src/models/RequestMessage.js';
 import { sanitizeCityForRoom } from "./src/utils/city.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -43,6 +44,26 @@ app.set('io', io);
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
+  const maskPhone = (phone) => {
+    if (!phone || typeof phone !== "string") return "";
+    const digits = phone.replace(/\D/g, "");
+    if (!digits) return "";
+    const tail = digits.slice(-4);
+    return `****${tail}`;
+  };
+
+  const maskEmail = (email) => {
+    if (!email || typeof email !== "string") return "";
+    const [user, domain] = email.split("@");
+    if (!domain) return email;
+    const safeUser = user.length <= 2 ? `${user[0]}*` : `${user[0]}${"*".repeat(Math.min(4, user.length - 1))}`;
+    const domainParts = domain.split(".");
+    const root = domainParts[0] || "";
+    const safeRoot = root.length <= 2 ? `${root[0]}*` : `${root[0]}${"*".repeat(Math.min(4, root.length - 1))}`;
+    const rest = domainParts.length > 1 ? `.${domainParts.slice(1).join(".")}` : "";
+    return `${safeUser}@${safeRoot}${rest}`;
+  };
+
   // Join a per-user room so we can emit targeted events reliably.
   // (The auth middleware sets socket.userId from JWT.)
   if (socket.userId) {
@@ -55,6 +76,8 @@ io.on("connection", (socket) => {
       .then(user => {
         if (user) {
           socket.userCity = user.city;
+          socket.userName = user.name;
+          socket.userEmail = user.email;
           console.log(`Socket authenticated for user: ${user.name} (${user._id})`);
         }
       })
@@ -320,6 +343,170 @@ io.on("connection", (socket) => {
     } catch (error) {
       console.error("Socket accept-charging-request error:", error);
       socket.emit("error", { message: "Failed to process request acceptance" });
+    }
+  });
+
+  /**
+   * Join a request-specific room for chat
+   * Event: 'join-request'
+   * Data: { requestId }
+   */
+  socket.on("join-request", async (data) => {
+    try {
+      const { requestId } = data || {};
+      if (!requestId) {
+        socket.emit("error", { message: "Invalid requestId" });
+        return;
+      }
+
+      const request = await ChargingRequest.findById(requestId).lean();
+      if (!request) {
+        socket.emit("error", { message: "Request not found" });
+        return;
+      }
+
+      const userId = socket.userId?.toString();
+      const isRequester = request.requesterId?.toString() === userId;
+      const isHelper = request.helperId?.toString() === userId;
+
+      if (!isRequester && !isHelper) {
+        socket.emit("error", { message: "Access denied" });
+        return;
+      }
+
+      if (!["ACCEPTED", "COMPLETED"].includes(request.status)) {
+        socket.emit("error", { message: "Chat is available only after acceptance" });
+        return;
+      }
+
+      const roomName = `request-${requestId}`;
+      socket.join(roomName);
+      socket.emit("request-joined", { requestId, roomName });
+    } catch (error) {
+      console.error("Error joining request room:", error);
+      socket.emit("error", { message: "Failed to join request room" });
+    }
+  });
+
+  socket.on("leave-request", (data) => {
+    const { requestId } = data || {};
+    if (!requestId) return;
+    const roomName = `request-${requestId}`;
+    socket.leave(roomName);
+  });
+
+  /**
+   * Send chat message
+   * Event: 'chat-message'
+   * Data: { requestId, text }
+   */
+  socket.on("chat-message", async (data) => {
+    try {
+      const { requestId, text } = data || {};
+      if (!requestId || typeof text !== "string") {
+        socket.emit("error", { message: "Invalid message payload" });
+        return;
+      }
+
+      const cleanedText = text.replace(/\s+/g, " ").trim().slice(0, 500);
+      if (!cleanedText) {
+        socket.emit("error", { message: "Message cannot be empty" });
+        return;
+      }
+
+      const request = await ChargingRequest.findById(requestId).lean();
+      if (!request) {
+        socket.emit("error", { message: "Request not found" });
+        return;
+      }
+
+      const userId = socket.userId?.toString();
+      const isRequester = request.requesterId?.toString() === userId;
+      const isHelper = request.helperId?.toString() === userId;
+
+      if (!isRequester && !isHelper) {
+        socket.emit("error", { message: "Access denied" });
+        return;
+      }
+
+      if (!["ACCEPTED", "COMPLETED"].includes(request.status)) {
+        socket.emit("error", { message: "Chat is available only after acceptance" });
+        return;
+      }
+
+      const senderRole = isRequester ? "requester" : "helper";
+      const message = await RequestMessage.create({
+        requestId,
+        senderId: userId,
+        senderName: socket.userName || "User",
+        senderRole,
+        type: "text",
+        text: cleanedText
+      });
+
+      const roomName = `request-${requestId}`;
+      io.to(roomName).emit("chat-message", { requestId, message });
+    } catch (error) {
+      console.error("Error sending chat message:", error);
+      socket.emit("error", { message: "Failed to send message" });
+    }
+  });
+
+  /**
+   * Share masked contact info
+   * Event: 'share-contact'
+   * Data: { requestId }
+   */
+  socket.on("share-contact", async (data) => {
+    try {
+      const { requestId } = data || {};
+      if (!requestId) {
+        socket.emit("error", { message: "Invalid requestId" });
+        return;
+      }
+
+      const request = await ChargingRequest.findById(requestId).lean();
+      if (!request) {
+        socket.emit("error", { message: "Request not found" });
+        return;
+      }
+
+      const userId = socket.userId?.toString();
+      const isRequester = request.requesterId?.toString() === userId;
+      const isHelper = request.helperId?.toString() === userId;
+
+      if (!isRequester && !isHelper) {
+        socket.emit("error", { message: "Access denied" });
+        return;
+      }
+
+      if (!["ACCEPTED", "COMPLETED"].includes(request.status)) {
+        socket.emit("error", { message: "Contact sharing is available only after acceptance" });
+        return;
+      }
+
+      const senderRole = isRequester ? "requester" : "helper";
+      const maskedPhone = isRequester ? maskPhone(request.phoneNumber) : "";
+      const maskedEmail = maskEmail(socket.userEmail);
+
+      const message = await RequestMessage.create({
+        requestId,
+        senderId: userId,
+        senderName: socket.userName || "User",
+        senderRole,
+        type: "contact",
+        text: "Shared contact details",
+        metadata: {
+          phoneMasked: maskedPhone,
+          emailMasked: maskedEmail
+        }
+      });
+
+      const roomName = `request-${requestId}`;
+      io.to(roomName).emit("chat-message", { requestId, message });
+    } catch (error) {
+      console.error("Error sharing contact:", error);
+      socket.emit("error", { message: "Failed to share contact" });
     }
   });
 

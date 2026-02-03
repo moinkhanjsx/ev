@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { authAPI } from '../utils/auth.js';
+import socketService from '../utils/socket.js';
 
 // Initial auth state
 const initialState = {
@@ -169,6 +170,7 @@ export const AuthProvider = ({ children }) => {
 
     logout: () => {
       authAPI.logout();
+      socketService.disconnect();
       dispatch({
         type: AUTH_ACTIONS.LOGOUT
       });

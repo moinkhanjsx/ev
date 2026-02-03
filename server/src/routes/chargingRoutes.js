@@ -2,12 +2,46 @@ import express from "express";
 import authMiddleware from "../middleware/auth.js";
 import ChargingRequest from "../models/ChargingRequest.js";
 import User from "../models/User.js";
+import RequestMessage from "../models/RequestMessage.js";
 import { buildCityExactMatchRegex, sanitizeCityForRoom } from "../utils/city.js";
 
 const router = express.Router();
 
 // Fixed token cost for creating a charging request
 const TOKEN_COST = 5;
+const MAX_MESSAGE_LENGTH = 500;
+
+const sanitizeMessage = (value) => {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_MESSAGE_LENGTH);
+};
+
+const maskPhone = (phone) => {
+  if (!phone || typeof phone !== "string") return "";
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  const tail = digits.slice(-4);
+  return `****${tail}`;
+};
+
+const maskEmail = (email) => {
+  if (!email || typeof email !== "string") return "";
+  const [user, domain] = email.split("@");
+  if (!domain) return email;
+  const safeUser = user.length <= 2 ? `${user[0]}*` : `${user[0]}${"*".repeat(Math.min(4, user.length - 1))}`;
+  const domainParts = domain.split(".");
+  const root = domainParts[0] || "";
+  const safeRoot = root.length <= 2 ? `${root[0]}*` : `${root[0]}${"*".repeat(Math.min(4, root.length - 1))}`;
+  const rest = domainParts.length > 1 ? `.${domainParts.slice(1).join(".")}` : "";
+  return `${safeUser}@${safeRoot}${rest}`;
+};
+
+const isParticipant = (request, userId) => {
+  if (!request || !userId) return false;
+  const requesterMatch = request.requesterId?.toString() === userId.toString();
+  const helperMatch = request.helperId?.toString() === userId.toString();
+  return requesterMatch || helperMatch;
+};
 
 /**
  * POST /api/charging/requests
@@ -1008,6 +1042,139 @@ router.get("/requests/helper", authMiddleware, async (req, res) => {
       success: false,
       message: "Internal server error while fetching helper requests"
     });
+  }
+});
+
+/**
+ * GET /api/charging/requests/:requestId/messages
+ * Get chat messages for a request (requester/helper only)
+ */
+router.get("/requests/:requestId/messages", authMiddleware, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+
+    const request = await ChargingRequest.findById(requestId).lean();
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Charging request not found" });
+    }
+
+    if (!isParticipant(request, userId)) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    const messages = await RequestMessage.find({ requestId })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .lean();
+
+    res.json({ success: true, messages });
+  } catch (error) {
+    console.error("Error fetching request messages:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch messages" });
+  }
+});
+
+/**
+ * POST /api/charging/requests/:requestId/messages
+ * Send a chat message (requester/helper only)
+ */
+router.post("/requests/:requestId/messages", authMiddleware, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+    const text = sanitizeMessage(req.body?.text);
+
+    if (!text) {
+      return res.status(400).json({ success: false, message: "Message cannot be empty" });
+    }
+
+    const request = await ChargingRequest.findById(requestId).lean();
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Charging request not found" });
+    }
+
+    if (!isParticipant(request, userId)) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    if (!["ACCEPTED", "COMPLETED"].includes(request.status)) {
+      return res.status(400).json({ success: false, message: "Chat is available only after a request is accepted" });
+    }
+
+    const senderRole = request.requesterId.toString() === userId ? "requester" : "helper";
+
+    const message = await RequestMessage.create({
+      requestId,
+      senderId: userId,
+      senderName: req.user.name || "User",
+      senderRole,
+      type: "text",
+      text
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      const roomName = `request-${requestId}`;
+      io.to(roomName).emit("chat-message", { requestId, message });
+    }
+
+    res.status(201).json({ success: true, message });
+  } catch (error) {
+    console.error("Error sending chat message:", error);
+    res.status(500).json({ success: false, message: "Failed to send message" });
+  }
+});
+
+/**
+ * POST /api/charging/requests/:requestId/share-contact
+ * Share masked contact info in chat (requester/helper only)
+ */
+router.post("/requests/:requestId/share-contact", authMiddleware, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+
+    const request = await ChargingRequest.findById(requestId).lean();
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Charging request not found" });
+    }
+
+    if (!isParticipant(request, userId)) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    if (!["ACCEPTED", "COMPLETED"].includes(request.status)) {
+      return res.status(400).json({ success: false, message: "Contact sharing is available only after acceptance" });
+    }
+
+    const senderRole = request.requesterId.toString() === userId ? "requester" : "helper";
+    const maskedEmail = maskEmail(req.user.email);
+    const maskedPhone = senderRole === "requester" ? maskPhone(request.phoneNumber) : "";
+
+    const message = await RequestMessage.create({
+      requestId,
+      senderId: userId,
+      senderName: req.user.name || "User",
+      senderRole,
+      type: "contact",
+      text: "Shared contact details",
+      metadata: {
+        phoneMasked: maskedPhone,
+        emailMasked: maskedEmail
+      }
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      const roomName = `request-${requestId}`;
+      io.to(roomName).emit("chat-message", { requestId, message });
+    }
+
+    res.status(201).json({ success: true, message });
+  } catch (error) {
+    console.error("Error sharing contact:", error);
+    res.status(500).json({ success: false, message: "Failed to share contact" });
   }
 });
 

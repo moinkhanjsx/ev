@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/auth.js';
 import socketService from '../utils/socket.js';
 import AcceptedRequestsList from '../components/AcceptedRequestsList';
+import RequestChatDrawer from '../components/RequestChatDrawer';
 
 const DashboardPage = () => {
   const { state, actions } = useAuth();
@@ -11,6 +12,7 @@ const DashboardPage = () => {
   const [loading, setLoading] = React.useState(true);
   const [helperLoading, setHelperLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
+  const [chatDrawer, setChatDrawer] = React.useState({ open: false, requestId: null, peerName: null });
 
   useEffect(() => {
     // Connect to socket and join user's city room
@@ -277,6 +279,76 @@ const DashboardPage = () => {
           </div>
         </div>
 
+        {/* Active Chats */}
+        {(() => {
+          const requesterChats = (requests || []).filter((r) => r.status === 'ACCEPTED');
+          const helperChats = (acceptedRequests || []).filter((r) => r.status === 'ACCEPTED');
+          const hasChats = requesterChats.length > 0 || helperChats.length > 0;
+
+          if (!hasChats) return null;
+
+          return (
+            <div className="ev-formal-card ev-card-spacing">
+              <div className="ev-section">
+                <h2 className="ev-formal-title mb-4">Active Chats</h2>
+                <div className="ev-stack-6">
+                  {requesterChats.map((request) => (
+                    <div key={`req-${request._id}`} className="ev-formal-card ev-formal-compact p-4 sm:p-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                          <div className="text-sm text-gray-400 mb-1">Your Request</div>
+                          <div className="text-white font-medium">Request #{request._id.slice(-6)}</div>
+                          <div className="ev-formal-subtitle">
+                            Helper: {request.helperId?.name || 'Assigned Helper'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            setChatDrawer({
+                              open: true,
+                              requestId: request._id,
+                              peerName: request.helperId?.name || 'Helper'
+                            })
+                          }
+                          className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+                        >
+                          Open Chat
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {helperChats.map((request) => (
+                    <div key={`helper-${request._id}`} className="ev-formal-card ev-formal-compact p-4 sm:p-6">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                          <div className="text-sm text-gray-400 mb-1">As Helper</div>
+                          <div className="text-white font-medium">Request #{request._id.slice(-6)}</div>
+                          <div className="ev-formal-subtitle">
+                            Requester: {request.requesterId?.name || 'Requester'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            setChatDrawer({
+                              open: true,
+                              requestId: request._id,
+                              peerName: request.requesterId?.name || 'Requester'
+                            })
+                          }
+                          className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+                        >
+                          Open Chat
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
           <a
@@ -381,98 +453,112 @@ const DashboardPage = () => {
                   </div>
                 ) : (
                   requests.map((request) => (
-                    <div key={request._id} className="ev-formal-card ev-formal-compact p-4 sm:p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div>
-                          <h3 className="text-lg font-medium text-white">Request #{request._id.slice(-6)}</h3>
-                          <p className="ev-formal-subtitle">
-                            Created: {new Date(request.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusClass(request.status)}`}>
-                          <span className="mr-1">{getStatusIcon(request.status)}</span>
-                          {request.status}
-                        </span>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <React.Fragment key={request._id}>
+                      <div className="ev-formal-card ev-formal-compact p-4 sm:p-6">
+                        <div className="flex items-center justify-between mb-4">
                           <div>
-                            <h4 className="text-sm font-medium text-gray-300">Location</h4>
-                            <p className="ev-formal-subtitle">{request.location}</p>
+                            <h3 className="text-lg font-medium text-white">Request #{request._id.slice(-6)}</h3>
+                            <p className="ev-formal-subtitle">
+                              Created: {new Date(request.createdAt).toLocaleDateString()}
+                            </p>
                           </div>
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-300">Urgency</h4>
-                            <p className="ev-formal-subtitle capitalize">{request.urgency}</p>
-                          </div>
+                          <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusClass(request.status)}`}>
+                            <span className="mr-1">{getStatusIcon(request.status)}</span>
+                            {request.status}
+                          </span>
                         </div>
 
-                        {request.message && (
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-300">Message</h4>
-                            <p className="ev-formal-subtitle">{request.message}</p>
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-300">Location</h4>
+                              <p className="ev-formal-subtitle">{request.location}</p>
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-300">Urgency</h4>
+                              <p className="ev-formal-subtitle capitalize">{request.urgency}</p>
+                            </div>
                           </div>
-                        )}
 
-                        {request.phoneNumber && (
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-300">Phone Number</h4>
-                            <p className="ev-formal-subtitle">{request.phoneNumber}</p>
-                          </div>
-                        )}
-                        {request.contactInfo && (
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-300">Contact Info</h4>
-                            <p className="ev-formal-subtitle">{request.contactInfo}</p>
-                          </div>
-                        )}
+                          {request.message && (
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-300">Message</h4>
+                              <p className="ev-formal-subtitle">{request.message}</p>
+                            </div>
+                          )}
 
-                        {request.estimatedTime && (
-                          <div>
-                            <h4 className="text-sm font-medium text-gray-300">Estimated Time</h4>
-                            <p className="ev-formal-subtitle">{request.estimatedTime} minutes</p>
-                          </div>
-                        )}
-                      </div>
+                          {request.phoneNumber && (
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-300">Phone Number</h4>
+                              <p className="ev-formal-subtitle">{request.phoneNumber}</p>
+                            </div>
+                          )}
+                          {request.contactInfo && (
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-300">Contact Info</h4>
+                              <p className="ev-formal-subtitle">{request.contactInfo}</p>
+                            </div>
+                          )}
 
-                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-700">
-                        <div className="ev-formal-subtitle">
-                          {request.tokenCost} tokens • Status: {request.status}
+                          {request.estimatedTime && (
+                            <div>
+                              <h4 className="text-sm font-medium text-gray-300">Estimated Time</h4>
+                              <p className="ev-formal-subtitle">{request.estimatedTime} minutes</p>
+                            </div>
+                          )}
                         </div>
-                         
-                        {/* Action buttons based on status */}
-                        {request.status === 'OPEN' && (
-                          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2">
-                            <button 
-                              onClick={() => handleCancelRequest(request._id)}
-                              className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
-                            >
-                              Cancel Request
-                            </button>
-                          </div>
-                        )}
 
-                        {request.status === 'ACCEPTED' && (
-                          <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:items-center">
-                            <button 
-                              onClick={() => handleCompleteRequest(request._id)}
-                              className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
-                            >
-                              Mark as Completed
-                            </button>
-                            <span className="text-xs sm:text-sm text-gray-400 sm:ml-2">
-                              Waiting for completion...
-                            </span>
+                        <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-700">
+                          <div className="ev-formal-subtitle">
+                            {request.tokenCost} tokens • Status: {request.status}
                           </div>
-                        )}
+                           
+                          {/* Action buttons based on status */}
+                          {request.status === 'OPEN' && (
+                            <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2">
+                              <button 
+                                onClick={() => handleCancelRequest(request._id)}
+                                className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+                              >
+                                Cancel Request
+                              </button>
+                            </div>
+                          )}
 
-                        {request.status === 'COMPLETED' && (
-                          <div className="text-sm text-green-400">
-                            <span>✓ Completed</span>
-                          </div>
-                        )}
+                          {request.status === 'ACCEPTED' && (
+                            <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:items-center">
+                              <button 
+                                onClick={() => handleCompleteRequest(request._id)}
+                                className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+                              >
+                                Mark as Completed
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setChatDrawer({
+                                    open: true,
+                                    requestId: request._id,
+                                    peerName: request.helperId?.name || "Helper"
+                                  })
+                                }
+                                className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+                              >
+                                Open Chat
+                              </button>
+                              <span className="text-xs sm:text-sm text-gray-400 sm:ml-2">
+                                Waiting for completion...
+                              </span>
+                            </div>
+                          )}
+
+                          {request.status === 'COMPLETED' && (
+                            <div className="text-sm text-green-400">
+                              <span>✓ Completed</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   ))
                 )}
               </div>
@@ -493,12 +579,25 @@ const DashboardPage = () => {
                 </div>
               ) : (
                 <AcceptedRequestsList 
-                  requests={acceptedRequests} 
+                  requests={acceptedRequests}
+                  onOpenChat={(request) =>
+                    setChatDrawer({
+                      open: true,
+                      requestId: request._id,
+                      peerName: request.requesterId?.name || "Requester"
+                    })
+                  }
                 />
               )}
             </div>
           </div>
         )}
+        <RequestChatDrawer
+          open={chatDrawer.open}
+          onClose={() => setChatDrawer({ open: false, requestId: null, peerName: null })}
+          requestId={chatDrawer.requestId}
+          peerName={chatDrawer.peerName}
+        />
       </div>
     </div>
   );

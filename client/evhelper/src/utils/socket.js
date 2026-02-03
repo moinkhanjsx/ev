@@ -4,6 +4,7 @@ class SocketService {
   constructor() {
     this.socket = null;
     this.connected = false;
+    this.currentToken = null;
   }
 
   /**
@@ -36,8 +37,14 @@ class SocketService {
       }
     }
     if (this.socket && this.connected) {
-      console.log('Socket already connected');
-      return this.socket;
+      if (token && token !== this.currentToken) {
+        this.socket.disconnect();
+        this.socket = null;
+        this.connected = false;
+      } else {
+        console.log('Socket already connected');
+        return this.socket;
+      }
     }
 
     // Disconnect any existing socket before creating new one
@@ -61,6 +68,7 @@ class SocketService {
       options.auth = {
         token: token
       };
+      this.currentToken = token;
     }
 
     try {
@@ -250,6 +258,17 @@ class SocketService {
   }
 
   /**
+   * Emit event
+   * @param {string} event - Event name
+   * @param {Object} data - Payload
+   */
+  emit(event, data) {
+    if (this.socket) {
+      this.socket.emit(event, data);
+    }
+  }
+
+  /**
    * Remove event listener
    * @param {string} event - Event name
    * @param {Function} callback - Event callback function
@@ -268,6 +287,7 @@ class SocketService {
       this.socket.disconnect();
       this.socket = null;
       this.connected = false;
+      this.currentToken = null;
       console.log('Socket disconnected manually');
     }
   }
