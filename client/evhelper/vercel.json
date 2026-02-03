@@ -2,10 +2,6 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "buildEnv": {
-    "VITE_API_URL": "https://ev-4let.onrender.com/api",
-    "VITE_SOCKET_URL": "https://ev-4let.onrender.com"
-  },
   "rewrites": [
     {
       "source": "/(.*)",
