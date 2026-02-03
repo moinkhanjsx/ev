@@ -258,8 +258,8 @@ const DashboardPage = () => {
         {/* Header */}
         <div className="ev-card ev-card-spacing">
           <div className="ev-section">
-            <div className="ev-flex-center justify-between">
-              <div className="ev-flex-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
                 <div className="inline-flex items-center justify-center w-12 h-12 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full ev-charging-pulse">
                   <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
@@ -269,7 +269,7 @@ const DashboardPage = () => {
               </div>
               <button
                 onClick={handleLogout}
-                className="ev-button-danger"
+                className="ev-button-danger w-full sm:w-auto"
               >
                 Sign Out
               </button>

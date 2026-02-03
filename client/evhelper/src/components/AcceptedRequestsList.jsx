@@ -34,23 +34,21 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
   return (
     <div className="space-y-4">
       {requests.map((request) => (
-        <div key={request._id} className="ev-glass-card p-6 hover:scale-[1.02] transition-transform duration-300">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="text-3xl">{getStatusIcon(request.status)}</div>
-                <div className="flex flex-col gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(request.status)}`}>
-                    {request.status}
-                  </span>
-                  <span className="px-2 py-1 text-xs font-semibold bg-blue-500/20 border border-blue-500/50 text-blue-300 rounded">
-                    ACCEPTED
-                  </span>
-                </div>
+        <div key={request._id} className="ev-glass-card p-4 sm:p-6 hover:scale-[1.02] transition-transform duration-300">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="text-2xl sm:text-3xl">{getStatusIcon(request.status)}</div>
+              <div className="flex flex-col gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(request.status)}`}>
+                  {request.status}
+                </span>
+                <span className="px-2 py-1 text-xs font-semibold bg-blue-500/20 border border-blue-500/50 text-blue-300 rounded">
+                  ACCEPTED
+                </span>
               </div>
             </div>
-            
-            <div className="flex-1">
+
+            <div className="flex-1 min-w-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <h4 className="text-sm font-medium text-gray-300 mb-1">📍 Location</h4>
@@ -74,7 +72,7 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-300 mb-1">💬 Message</h4>
-                <p className="text-gray-400 wrap-break-words">{request.message}</p>
+                  <p className="text-gray-400 wrap-break-words">{request.message}</p>
                 </div>
               </div>
 
@@ -86,7 +84,7 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-700">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 mt-4 border-t border-gray-700">
               <div className="text-sm text-gray-400">
                 {request.tokenCost} tokens • Status: {request.status}
               </div>
@@ -96,7 +94,7 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
                request.requesterId?._id === state.user?._id && (
                 <button
                   onClick={() => onCompleteRequest(request._id)}
-                  className="px-4 py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors"
                 >
                   Mark as Completed
                 </button>

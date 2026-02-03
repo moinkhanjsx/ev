@@ -127,15 +127,15 @@ const ActiveRequests = () => {
 
   return (
     <div className="min-h-screen py-8 relative z-10">
-      <div className="max-w-6xl mx-auto sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="ev-card ev-card-spacing">
           <div className="ev-section">
-            <div className="ev-flex-center justify-between">
-              <div className="ev-flex-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <button
                   onClick={() => navigate('/dashboard')}
-                  className="ev-button-secondary"
+                  className="ev-button-secondary w-full sm:w-auto"
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -149,7 +149,7 @@ const ActiveRequests = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-start sm:self-auto">
                 <div className="ev-loading"></div>
                 <span className="text-sm text-gray-400">Live</span>
               </div>
