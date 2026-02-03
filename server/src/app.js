@@ -33,12 +33,15 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// Serve static HTML files from public folder
-const publicPath = path.join(__dirname, '../public');
-console.log('DEBUG: __dirname =', __dirname);
-console.log('DEBUG: publicPath =', publicPath);
-console.log('DEBUG: public folder exists?', fs.existsSync(publicPath));
-app.use(express.static(publicPath, { 
+// Serve static files from React build (production)
+const distPath = path.join(__dirname, '../../client/evhelper/dist');
+const fallbackPath = path.join(__dirname, '../public');
+
+// In production, serve React build; in dev, serve test HTML
+const staticPath = fs.existsSync(distPath) ? distPath : fallbackPath;
+console.log('DEBUG: Serving static files from:', staticPath);
+
+app.use(express.static(staticPath, { 
   setHeaders: (res) => {
     res.set('Cache-Control', 'public, max-age=3600');
   }
@@ -53,9 +56,11 @@ app.use('/api', (req, res) => {
 });
 
 // Fallback: Serve index.html for any non-API route (SPA-style)
-// NOTE: Express 5 + path-to-regexp does not accept '*' as a route string.
 app.get(/^\/(?!api).*/, (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  const indexPath = fs.existsSync(distPath) 
+    ? path.join(distPath, 'index.html')
+    : path.join(fallbackPath, 'index.html');
+  res.sendFile(indexPath);
 });
 
 // Example of protected routes using the auth middleware
