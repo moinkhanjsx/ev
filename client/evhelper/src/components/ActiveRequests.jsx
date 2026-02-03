@@ -9,6 +9,7 @@ const ActiveRequests = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [acceptingIds, setAcceptingIds] = useState(() => new Set());
 
   useEffect(() => {
     if (state.isAuthenticated && state.user?.city) {
@@ -21,7 +22,8 @@ const ActiveRequests = () => {
     setError(null);
     
     try {
-      const response = await api.get(`/charging/requests/city/${state.user?.city}`);
+      const cityPath = encodeURIComponent(state.user?.city || '');
+      const response = await api.get(`/charging/requests/city/${cityPath}`);
       
       if (response.data.success) {
         console.log('Current user ID:', state.user?._id);
@@ -54,12 +56,11 @@ const ActiveRequests = () => {
 
   const handleAcceptRequest = async (requestId) => {
     try {
-      // SAFETY CHECK: Prevent duplicate clicks
-      const acceptButton = document.querySelector(`[onclick*="${requestId}"]`);
-      if (acceptButton) {
-        acceptButton.disabled = true;
-        acceptButton.textContent = 'Accepting...';
-      }
+      setAcceptingIds((prev) => {
+        const next = new Set(prev);
+        next.add(requestId);
+        return next;
+      });
 
       const response = await api.post(`/charging/requests/${requestId}/accept`);
       
@@ -74,14 +75,11 @@ const ActiveRequests = () => {
       const errorMessage = error.response?.data?.message || error.message || 'Failed to accept request';
       alert(errorMessage);
     } finally {
-      // SAFETY CHECK: Re-enable button after request completes
-      setTimeout(() => {
-        const acceptButton = document.querySelector(`[onclick*="${requestId}"]`);
-        if (acceptButton) {
-          acceptButton.disabled = false;
-          acceptButton.textContent = 'Accept Request';
-        }
-      }, 1000);
+      setAcceptingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
     }
   };
 
@@ -240,9 +238,10 @@ const ActiveRequests = () => {
                       {request.status === 'OPEN' && !isMyRequest(request) && (
                         <button
                           onClick={() => handleAcceptRequest(request._id)}
-                          className="ev-neon-button w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ev-charging-pulse"
+                          disabled={acceptingIds.has(request._id)}
+                          className="ev-neon-button w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ev-charging-pulse disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          Accept Request
+                          {acceptingIds.has(request._id) ? 'Accepting…' : 'Accept Request'}
                         </button>
                       )}
                     </div>

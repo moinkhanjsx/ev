@@ -1,6 +1,6 @@
-import React, { useContext, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import api, { authAPI } from '../utils/auth.js';
+import api from '../utils/auth.js';
 import socketService from '../utils/socket.js';
 import AcceptedRequestsList from '../components/AcceptedRequestsList';
 
@@ -15,52 +15,68 @@ const DashboardPage = () => {
   useEffect(() => {
     // Connect to socket and join user's city room
     if (state.isAuthenticated && state.user?.city) {
-      socketService.connect('http://localhost:5000', state.user.city, state.token);
-      
-      // Set up event listeners for real-time updates
-      socketService.on('charging-request', (data) => {
-        console.log('New charging request received:', data);
-        setRequests(prev => [data, ...prev]);
-      });
+      // Let SocketService auto-detect URL (prod uses window.location.origin)
+      socketService.connect(null, state.user.city, state.token);
 
-      socketService.on('request-accepted', (data) => {
-        console.log('Request accepted:', data);
-        setRequests(prev => prev.map(req => 
-          req._id === data.requestId ? { ...req, status: 'ACCEPTED' } : req
-        ));
-        // Refresh helper's accepted requests when they accept a request
+      const upsertRequest = (prev, req) => {
+        if (!req?._id) return prev;
+        const existing = prev.find((r) => r._id === req._id);
+        if (existing) {
+          return prev.map((r) => (r._id === req._id ? { ...r, ...req } : r));
+        }
+        return [req, ...prev];
+      };
+
+      // charging-request is emitted for new requests in the city room
+      const onChargingRequest = (data) => {
+        const normalized = {
+          ...data,
+          _id: data?._id || data?.id,
+          createdAt: data?.createdAt || new Date().toISOString()
+        };
+
+        console.log('New charging request received:', normalized);
+        setRequests((prev) => upsertRequest(prev, normalized));
+      };
+
+      // request-taken is emitted when a request becomes unavailable in the city
+      const onRequestTaken = (data) => {
+        const id = data?.requestId || data?.id || data?._id;
+        if (!id) return;
+        setRequests((prev) => prev.map((r) => (r._id === id ? { ...r, status: 'ACCEPTED' } : r)));
         fetchAcceptedRequests();
-      });
+      };
 
-      socketService.on('request-completed', (data) => {
-        console.log('Request completed:', data);
-        setRequests(prev => prev.map(req => 
-          req._id === data.requestId ? { ...req, status: 'COMPLETED' } : req
-        ));
-        // Refresh helper's accepted requests when a request is completed
+      // These notifications include requestId
+      const onRequestCompletedNotification = (data) => {
+        const id = data?.requestId || data?.id || data?._id;
+        if (!id) return;
+        setRequests((prev) => prev.map((r) => (r._id === id ? { ...r, status: 'COMPLETED' } : r)));
         fetchAcceptedRequests();
-      });
+      };
 
-      socketService.on('request-canceled', (data) => {
-        console.log('Request canceled:', data);
-        setRequests(prev => prev.map(req => 
-          req._id === data.requestId ? { ...req, status: 'CANCELED' } : req
-        ));
-        // Refresh helper's accepted requests when a request is canceled
+      const onRequestCanceledNotification = (data) => {
+        const id = data?.requestId || data?.id || data?._id;
+        if (!id) return;
+        setRequests((prev) => prev.map((r) => (r._id === id ? { ...r, status: 'CANCELED' } : r)));
         fetchAcceptedRequests();
-      });
+      };
 
-      socketService.on('request-accepted-notification', (data) => {
-        console.log('Request accepted notification:', data);
-      });
-
-      socketService.on('request-canceled-notification', (data) => {
-        console.log('Request canceled notification:', data);
-      });
+      socketService.on('charging-request', onChargingRequest);
+      socketService.on('request-taken', onRequestTaken);
+      socketService.on('request-completed-notification', onRequestCompletedNotification);
+      socketService.on('request-canceled-notification', onRequestCanceledNotification);
 
       // Initial load
       fetchRequests();
       fetchAcceptedRequests();
+
+      return () => {
+        socketService.off('charging-request', onChargingRequest);
+        socketService.off('request-taken', onRequestTaken);
+        socketService.off('request-completed-notification', onRequestCompletedNotification);
+        socketService.off('request-canceled-notification', onRequestCanceledNotification);
+      };
     }
   }, [state.isAuthenticated, state.user?.city]);
 
@@ -142,7 +158,7 @@ const DashboardPage = () => {
     
     try {
       // Fetch requests from user's city for the "Active Requests" section
-      const response = await api.get(`/charging/requests/city/${state.user.city}`);
+      const response = await api.get(`/charging/requests/city/${encodeURIComponent(state.user.city)}`);
       
       if (response.data.success) {
         // This could be used to show city requests in a separate section

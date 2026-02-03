@@ -1,4 +1,4 @@
-# EV Helper - Monolithic Application
+# EV Helper
 
 A full-stack application for EV charging assistance with real-time communication.
 
@@ -23,19 +23,30 @@ A full-stack application for EV charging assistance with real-time communication
    NODE_ENV=development
    ```
 
-3. **Run in development mode:**
+3. **Run in development mode (separate terminals):**
+   
+   **Backend**
    ```bash
+   cd server
    npm run dev
    ```
-   This will start:
-   - Backend server on port 5000
-   - Frontend development server on port 5173
+   
+   **Frontend**
+   ```bash
+   cd client/evhelper
+   npm run dev
+   ```
+   
+   Notes:
+   - Backend defaults to port **5000**.
+   - Vite usually uses **5173**, but may automatically pick **5174** (or another port) if 5173 is busy. Use the URL printed in the terminal.
 
 ### Available Scripts
 
-- `npm run dev` - Run both frontend and backend in development mode
-- `npm run server:dev` - Run only backend with nodemon
-- `npm run client:dev` - Run only frontend with Vite
+- `npm run server:dev` - Run only backend with nodemon (from repo root)
+- `npm run client:dev` - Run only frontend with Vite (from repo root)
+- `cd server && npm run dev` - Run backend from the server package
+- `cd client/evhelper && npm run dev` - Run frontend from the client package
 - `npm run build` - Build the frontend for production
 - `npm run start` - Start the production server
 - `npm run install-deps` - Install dependencies for all packages
@@ -63,7 +74,7 @@ The application will serve the React frontend and API from the same server on po
 
 ```
 evhelper/
-├── package.json              # Root package.json with monolithic scripts
+├── package.json              # Root scripts (no combined dev runner)
 ├── README.md                 # This file
 ├── server/                   # Backend Express.js application
 │   ├── server.js            # Main server entry point

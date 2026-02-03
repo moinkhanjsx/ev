@@ -15,9 +15,25 @@ class SocketService {
   connect(serverUrl = null, city = null, token = null) {
     // Auto-detect server URL based on environment
     if (!serverUrl) {
-      serverUrl = process.env.NODE_ENV === 'production' 
-        ? window.location.origin 
-        : 'http://localhost:5000';
+      // Prefer explicit socket URL if provided (recommended for split deployments).
+      // Examples:
+      // - Dev: VITE_SOCKET_URL=http://localhost:5000
+      // - Prod (Render): VITE_SOCKET_URL=https://evhelper.onrender.com
+      const envSocketUrl = import.meta.env.VITE_SOCKET_URL && import.meta.env.VITE_SOCKET_URL.trim();
+      const envApiUrl = import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim();
+
+      if (envSocketUrl) {
+        serverUrl = envSocketUrl;
+      } else if (envApiUrl && /^https?:\/\//i.test(envApiUrl)) {
+        // Derive socket origin from API URL (strip any /api path).
+        serverUrl = new URL(envApiUrl).origin;
+      } else if (import.meta.env.PROD) {
+        // Monolithic deployment: frontend and backend share an origin.
+        serverUrl = window.location.origin;
+      } else {
+        // Local dev default
+        serverUrl = 'http://localhost:5000';
+      }
     }
     if (this.socket && this.connected) {
       console.log('Socket already connected');
@@ -127,15 +143,14 @@ class SocketService {
   /**
    * Accept a charging request
    * @param {string} requestId - ID of the charging request
-   * @param {string} requesterId - Socket ID of the requester
    */
-  acceptChargingRequest(requestId, requesterId) {
+  acceptChargingRequest(requestId) {
     if (!this.socket || !this.connected) {
       console.error('Socket not connected. Cannot accept charging request.');
       return false;
     }
 
-    this.socket.emit('accept-charging-request', { requestId, requesterId });
+    this.socket.emit('accept-charging-request', { requestId });
     console.log(`Charging request ${requestId} accepted`);
     return true;
   }

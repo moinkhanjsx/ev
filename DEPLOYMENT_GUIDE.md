@@ -8,13 +8,14 @@
 
 ### Local Development (.env)
 ```
-VITE_API_URL=http://localhost:5000/api
+VITE_API_URL=/api
 ```
-Frontend will use local backend on port 5000.
+Frontend will use Vite's `/api` proxy to reach the local backend on port 5000.
 
 ### Production (.env.production)
 ```
 VITE_API_URL=https://evhelper.onrender.com/api
+VITE_SOCKET_URL=https://evhelper.onrender.com
 ```
 Frontend will use Render backend in production.
 
@@ -59,9 +60,15 @@ cors({
 
 ### Local Dev
 ```bash
+cd server
 npm install
 npm run dev
-# Frontend: http://localhost:5173
+
+cd ../client/evhelper
+npm install
+npm run dev
+
+# Frontend: check the URL printed by Vite (usually http://localhost:5173)
 # Backend: http://localhost:5000
 ```
 

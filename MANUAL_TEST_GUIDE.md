@@ -307,6 +307,13 @@ FORM VALIDATION:
 ### Server Not Running
 ```bash
 cd "e:\react project\matin\evhelper zip\evhelper"
+
+# Backend
+cd server
+npm run dev
+
+# Frontend (run in another terminal)
+cd ..\client\evhelper
 npm run dev
 ```
 

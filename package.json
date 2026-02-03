@@ -5,7 +5,6 @@
   "main": "server/server.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "server:dev": "cd server && nodemon server.js",
     "client:dev": "cd client/evhelper && vite",
     "build": "cd client/evhelper && vite build",

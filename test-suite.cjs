@@ -184,7 +184,7 @@ async function runTests() {
       location: '123 Main St',
       urgency: 'high',
       message: 'Need charging urgently',
-      contact: '+1234567890',
+      phoneNumber: '+1234567890',
       timeAvailable: '2026-01-20T10:00:00Z'
     };
 
@@ -281,8 +281,8 @@ async function runTests() {
     failedTests++;
   }
 
-  // TEST 8: Gamma User Fetches Requests (All Cities - But Can See New York)
-  console.log('📋 TEST 8: Gamma Fetches Requests (Can See All Cities)');
+  // TEST 8: Gamma User Fetches Requests (Different City Isolation)
+  console.log('📋 TEST 8: Gamma Fetches Requests (Different City Isolation)');
   try {
     const url = new URL(API_BASE + '/charging/requests/city/Toronto');
     const options = {
@@ -317,26 +317,19 @@ async function runTests() {
       req.end();
     });
 
+    // City endpoint should only return Toronto requests; Gamma must NOT see New York requests.
     if (result.data.requests && result.data.requests.length > 0) {
-      const hasToronto = result.data.requests.some(r => r.isFromUserCity === true);
-      const hasOtherCities = result.data.requests.some(r => r.isFromUserCity === false);
-      
-      if (hasToronto && hasOtherCities) {
-        console.log(`✅ PASSED - Gamma can see all cities (prioritized Toronto)`);
-        console.log(`   Total: ${result.data.requests.length} request(s)`);
-        console.log(`   From Toronto (own city): ${result.data.requests.filter(r => r.isFromUserCity).length}`);
-        console.log(`   From other cities: ${result.data.requests.filter(r => !r.isFromUserCity).length}\n`);
-        passedTests++;
-      } else if (hasOtherCities && !hasToronto) {
-        console.log(`✅ PASSED - Gamma can see all cities (no Toronto requests exist)`);
-        console.log(`   Total: ${result.data.requests.length} request(s) from other cities\n`);
-        passedTests++;
-      } else {
-        console.log(`❌ FAILED - Should see requests from all cities\n`);
+      const foundAlphaRequest = result.data.requests.some(r => r._id === alphaRequestId);
+      if (foundAlphaRequest) {
+        console.log(`❌ FAILED - Gamma should NOT see Alpha's New York request via Toronto endpoint\n`);
         failedTests++;
+      } else {
+        console.log(`✅ PASSED - Gamma cannot see New York requests via Toronto endpoint`);
+        console.log(`   Found ${result.data.requests.length} Toronto request(s)\n`);
+        passedTests++;
       }
     } else {
-      console.log(`✅ PASSED - No requests available\n`);
+      console.log(`✅ PASSED - No Toronto requests available (and none leaked from other cities)\n`);
       passedTests++;
     }
   } catch (err) {

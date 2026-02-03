@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import app from "./src/app.js";
 import ChargingRequest from './src/models/ChargingRequest.js';
 import User from './src/models/User.js';
+import { sanitizeCityForRoom } from "./src/utils/city.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -39,48 +40,33 @@ io.use((socket, next) => {
 // Make io instance available to routes
 app.set('io', io);
 
-/**
- * Utility function to sanitize and format city names for room names
- * @param {string} city - City name to sanitize
- * @returns {string} - Sanitized room name
- */
-const sanitizeCityName = (city) => {
-  return city
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '');
-};
-
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // Authenticate socket using JWT token from handshake
-  const token = socket.handshake.auth.token;
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
-      User.findById(decoded.userId)
-        .then(user => {
-          if (user) {
-            socket.userId = user._id.toString();
-            socket.userCity = user.city;
-            console.log(`Socket authenticated for user: ${user.name} (${user._id})`);
-          }
-        })
-        .catch(err => console.error('Socket authentication error:', err));
-    } catch (error) {
-      console.error('Socket JWT verification error:', error);
-    }
+  // Join a per-user room so we can emit targeted events reliably.
+  // (The auth middleware sets socket.userId from JWT.)
+  if (socket.userId) {
+    socket.join(socket.userId.toString());
+  }
+
+  // Fetch user profile data (optional) after auth.
+  if (socket.userId) {
+    User.findById(socket.userId)
+      .then(user => {
+        if (user) {
+          socket.userCity = user.city;
+          console.log(`Socket authenticated for user: ${user.name} (${user._id})`);
+        }
+      })
+      .catch(err => console.error('Socket authentication error:', err));
   }
 
   /**
- * Handle user joining a city-specific room
- * Event: 'join-city'
- * Data: { city: string }
- */
-socket.on("join-city", (data) => {
+   * Handle user joining a city-specific room
+   * Event: 'join-city'
+   * Data: { city: string }
+   */
+  socket.on("join-city", (data) => {
     try {
       const { city } = data;
 
@@ -90,8 +76,9 @@ socket.on("join-city", (data) => {
         return;
       }
 
-      const sanitizedCity = sanitizeCityName(city);
+      const sanitizedCity = sanitizeCityForRoom(city);
       const roomName = `city-${sanitizedCity}`;
+      console.log(`City sanitization - Original: "${city}" -> Sanitized: "${sanitizedCity}" -> Room: "${roomName}"`);
 
       // Join city-specific room
       socket.join(roomName);
@@ -123,10 +110,10 @@ socket.on("join-city", (data) => {
   });
 
   /**
- * Handle leaving city room
- * Event: 'leave-city'
- */
-socket.on("leave-city", () => {
+   * Handle leaving city room
+   * Event: 'leave-city'
+   */
+  socket.on("leave-city", () => {
     if (socket.roomName) {
       socket.leave(socket.roomName);
       
@@ -148,11 +135,11 @@ socket.on("leave-city", () => {
   });
 
   /**
- * Handle charging requests within a city
- * Event: 'charging-request'
- * Data: charging request object
- */
-socket.on("charging-request", (requestData) => {
+   * Handle charging requests within a city
+   * Event: 'charging-request'
+   * Data: charging request object
+   */
+  socket.on("charging-request", (requestData) => {
     if (socket.roomName) {
       // Broadcast charging request to all users in same city (including sender for confirmation)
       io.to(socket.roomName).emit("charging-request", {
@@ -169,11 +156,11 @@ socket.on("charging-request", (requestData) => {
   });
 
   /**
- * Handle accepting charging requests with race condition protection and duplicate prevention
- * Event: 'accept-charging-request'
- * Data: { requestId: string }
- */
-socket.on("accept-charging-request", async (data) => {
+   * Handle accepting charging requests with race condition protection and duplicate prevention
+   * Event: 'accept-charging-request'
+   * Data: { requestId: string }
+   */
+  socket.on("accept-charging-request", async (data) => {
     try {
       const { requestId } = data;
       const helperId = socket.userId; // Assuming userId is stored in socket after auth

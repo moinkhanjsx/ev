@@ -1,11 +1,12 @@
 import axios from 'axios';
 
-// API base URL - use /api for both dev and production (Vite proxy handles dev)
-// const API_BASE_URL = '/api';
-//import.meta.env.VITE_API_URL,
+// API base URL
+// - In dev, prefer '/api' so Vite can proxy to the backend.
+// - In prod, VITE_API_URL can point at a full origin like 'https://your-domain.com/api'.
+const API_BASE_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) || '/api';
 // Create axios instance with default configuration
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -32,15 +33,8 @@ api.interceptors.request.use(
 // Response interceptor to handle token expiration and improve error handling
 api.interceptors.response.use(
   (response) => {
-    // Handle 401 responses (token expired)
-    if (response.status === 401) {
-      localStorage.removeItem('evhelper_token');
-      localStorage.removeItem('evhelper_user');
-      window.location.href = '/login';
-    }
-    
     // SAFETY CHECK: Log response for debugging
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log('API Response:', {
         url: response.config.url,
         status: response.status,
@@ -61,7 +55,7 @@ api.interceptors.response.use(
     }
     
     // SAFETY CHECK: Enhanced error logging for debugging
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.error('API Error Details:', {
         url: error.config?.url,
         status: error.response?.status,

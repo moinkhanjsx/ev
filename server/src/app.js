@@ -47,12 +47,14 @@ app.use(express.static(publicPath, {
 app.use("/api/auth", authRoutes);
 app.use("/api/charging", chargingRoutes);
 
-// Fallback: Serve index.html for any unmatched routes (SPA-style)
-app.get('*', (req, res) => {
-  // Don't serve HTML for API requests - let them 404 naturally
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ message: 'Not found' });
-  }
+// API 404 (keep API responses JSON)
+app.use('/api', (req, res) => {
+  res.status(404).json({ message: 'Not found' });
+});
+
+// Fallback: Serve index.html for any non-API route (SPA-style)
+// NOTE: Express 5 + path-to-regexp does not accept '*' as a route string.
+app.get(/^\/(?!api).*/, (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 

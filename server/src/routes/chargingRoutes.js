@@ -2,6 +2,7 @@ import express from "express";
 import authMiddleware from "../middleware/auth.js";
 import ChargingRequest from "../models/ChargingRequest.js";
 import User from "../models/User.js";
+import { buildCityExactMatchRegex, sanitizeCityForRoom } from "../utils/city.js";
 
 const router = express.Router();
 
@@ -20,8 +21,11 @@ router.post("/requests", authMiddleware, async (req, res) => {
     const userId = req.user._id;
     const userCity = req.user.city;
 
+    const rawPhoneNumber = phoneNumber ?? contactInfo ?? contact;
+    const normalizedPhoneNumber = typeof rawPhoneNumber === "string" ? rawPhoneNumber.trim() : "";
+
     // Validate required fields
-    if (!location || !urgency || !phoneNumber) {
+    if (!location || !urgency || !normalizedPhoneNumber) {
       return res.status(400).json({
         success: false,
         message: "Location, urgency, and phone number are required fields"
@@ -30,7 +34,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
 
     // Validate phone number format
     const phoneRegex = /^[\+]?[(]?[0-9]{1,3}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/;
-    if (!phoneRegex.test(phoneNumber.trim())) {
+    if (!phoneRegex.test(normalizedPhoneNumber)) {
       return res.status(400).json({
         success: false,
         message: "Please enter a valid phone number"
@@ -95,7 +99,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
         location: location.trim(),
         urgency: urgency.toLowerCase(),
         message: message ? message.trim() : "",
-        phoneNumber: phoneNumber.trim(),
+        phoneNumber: normalizedPhoneNumber,
         estimatedTime: estimatedTime ? parseInt(estimatedTime) : null,
         tokenCost: TOKEN_COST
       });
@@ -119,7 +123,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
       // For now, we'll emit the event and handle it in the server file
       const io = req.app.get('io');
       if (io) {
-        const roomName = `city-${userCity.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
+        const roomName = `city-${sanitizeCityForRoom(userCity)}`;
         
         io.to(roomName).emit('charging-request', {
           id: request._id,
@@ -252,9 +256,9 @@ router.get("/requests/city/:city", authMiddleware, async (req, res) => {
 
     // CRITICAL FIX: Only get requests from the specified city
     // Use case-insensitive regex to handle city name variations
-    const filter = { 
+    const filter = {
       status: "OPEN",
-      city: { $regex: `^${city}$`, $options: 'i' }
+      city: buildCityExactMatchRegex(city)
     };
 
     // Calculate pagination
@@ -407,7 +411,7 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
       });
 
       // Notify the city that request was accepted
-      const roomName = `city-${request.city.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
+      const roomName = `city-${sanitizeCityForRoom(request.city)}`;
       io.to(roomName).emit('request-accepted-notification', {
         requestId: request._id,
         message: `A charging request has been accepted in ${request.city}`,
@@ -564,7 +568,7 @@ router.post("/requests/:requestId/complete", authMiddleware, async (req, res) =>
       // Emit real-time notifications
       const io = req.app.get('io');
       if (io) {
-        const roomName = `city-${request.city.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
+        const roomName = `city-${sanitizeCityForRoom(request.city)}`;
 
         // 1. Notify both parties of completion
         io.to(requesterId.toString()).emit('request-completed', {
@@ -738,7 +742,7 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
       // Emit real-time notifications
       const io = req.app.get('io');
       if (io) {
-        const roomName = `city-${request.city.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
+        const roomName = `city-${sanitizeCityForRoom(request.city)}`;
 
         // 1. Notify requester of cancellation confirmation
         io.to(request.requesterId._id.toString()).emit('request-canceled', {

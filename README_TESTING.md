@@ -219,7 +219,12 @@ This test verifies the most critical fix applied in this session.
 ### Server Commands:
 ```bash
 cd "e:\react project\matin\evhelper zip\evhelper"
-npm run dev              # Start both frontend and backend
+cd server
+npm run dev              # Start backend
+
+# in another terminal
+cd ..\client\evhelper
+npm run dev              # Start frontend
 ```
 
 ### Frontend URL:

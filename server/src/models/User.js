@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
       type: {
         type: String,
         required: true,
-        enum: ["charging_request", "reward", "refund", "bonus"]
+        enum: ["charging_request", "reward", "payment", "refund", "bonus"]
       },
       description: {
         type: String,
