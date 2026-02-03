@@ -7,7 +7,7 @@
   "scripts": {
     "server:dev": "cd server && nodemon server.js",
     "client:dev": "cd client/evhelper && vite",
-    "build": "cd client/evhelper && vite build",
+    "build": "cd client/evhelper && npm run build",
     "build:all": "npm run build && npm run setup:server",
     "setup:server": "cd server && npm install",
     "start": "npm run build && NODE_ENV=production node server/server.js",
