@@ -126,32 +126,31 @@ const ChargingRequestForm = () => {
   return (
     <div className="min-h-screen py-8 relative z-10">
       <div className="ev-container">
-        <div className="ev-card">
-          <div className="p-6 lg:p-8">
-            {/* Header */}
-            <div className="ev-section ev-text-center">
-              <div className="mb-6">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full ev-charging-pulse">
-                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                  </svg>
-                </div>
+        <div className="ev-formal-card">
+          {/* Header */}
+          <div className="ev-section ev-text-center mb-10">
+            <div className="mb-4">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full ev-charging-pulse ev-formal-badge">
+                <svg className="w-6 h-6 ev-formal-icon" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
               </div>
-              <h1 className="ev-heading-1 ev-neon-text mb-2">Create Charging Request</h1>
-              <p className="ev-text-muted">Get emergency charging assistance from community</p>
             </div>
+            <h1 className="ev-formal-title mb-2">Create Charging Request</h1>
+            <p className="ev-formal-subtitle">Get emergency charging assistance from community</p>
+          </div>
 
-            {/* Error Display */}
-            {errors.general && (
-              <div className="ev-form-field p-4 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg backdrop-blur-sm">
-                <div className="ev-text-body">{errors.general}</div>
-              </div>
-            )}
+          {/* Error Display */}
+          {errors.general && (
+            <div className="ev-form-field p-5 mb-6 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg backdrop-blur-sm">
+              <div className="ev-text-body">{errors.general}</div>
+            </div>
+          )}
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="ev-formal-form">
               {/* Location Field */}
-              <div>
-                <label htmlFor="location" className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="ev-formal-field">
+                <label htmlFor="location" className="ev-formal-label block">
                   Location *
                 </label>
                 <textarea
@@ -159,18 +158,19 @@ const ChargingRequestForm = () => {
                   name="location"
                   value={formData.location}
                   onChange={handleChange}
-                  className={`ev-input w-full resize-none ${errors.location ? 'border-red-500' : ''}`}
+                  className={`ev-input ev-formal-input w-full resize-none ${errors.location ? 'ev-input-error' : ''}`}
                   rows={3}
                   placeholder="Enter your current location or address"
                 />
+                <p className="ev-formal-helper">Be as specific as possible for quick help.</p>
                 {errors.location && (
-                  <p className="mt-1 text-sm text-red-400">{errors.location}</p>
+                  <p className="mt-4 text-sm text-red-400">{errors.location}</p>
                 )}
               </div>
 
               {/* Urgency Field */}
-              <div>
-                <label htmlFor="urgency" className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="ev-formal-field">
+                <label htmlFor="urgency" className="ev-formal-label block">
                   Urgency Level *
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -179,27 +179,26 @@ const ChargingRequestForm = () => {
                       key={level}
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, urgency: level }))}
-                      className={`p-3 rounded-lg border transition-all duration-300 ${
-                        formData.urgency === level
-                          ? getUrgencyColor(level)
-                          : 'bg-gray-800/50 border-gray-600 text-gray-400 hover:border-gray-500'
+                      className={`ev-formal-chip-select ${
+                        formData.urgency === level ? 'ev-formal-chip-select-active' : ''
                       }`}
                     >
                       <div className="text-center">
-                        <div className="text-2xl mb-1">{getUrgencyIcon(level)}</div>
+                        <div className="text-2xl">{getUrgencyIcon(level)}</div>
                         <div className="text-sm font-medium capitalize">{level}</div>
                       </div>
                     </button>
                   ))}
                 </div>
+                <p className="ev-formal-helper">Choose how urgent the request is.</p>
                 {errors.urgency && (
-                  <p className="mt-1 text-sm text-red-400">{errors.urgency}</p>
+                  <p className="mt-4 text-sm text-red-400">{errors.urgency}</p>
                 )}
               </div>
 
               {/* Message Field */}
-              <div>
-                <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="ev-formal-field">
+                <label htmlFor="message" className="ev-formal-label block">
                   Additional Details
                 </label>
                 <textarea
@@ -207,18 +206,19 @@ const ChargingRequestForm = () => {
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
-                  className={`ev-input w-full resize-none ${errors.message ? 'border-red-500' : ''}`}
+                  className={`ev-input ev-formal-input w-full resize-none ${errors.message ? 'ev-input-error' : ''}`}
                   rows={3}
                   placeholder="Any additional information that might help (optional)"
                 />
+                <p className="ev-formal-helper">Optional: include landmarks or vehicle details.</p>
                 {errors.message && (
-                  <p className="mt-1 text-sm text-red-400">{errors.message}</p>
+                  <p className="mt-4 text-sm text-red-400">{errors.message}</p>
                 )}
               </div>
 
               {/* Phone Number Field */}
-              <div>
-                <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="ev-formal-field">
+                <label htmlFor="phoneNumber" className="ev-formal-label block">
                   Phone Number *
                 </label>
                 <input
@@ -227,17 +227,18 @@ const ChargingRequestForm = () => {
                   name="phoneNumber"
                   value={formData.phoneNumber}
                   onChange={handleChange}
-                  className={`ev-input w-full ${errors.phoneNumber ? 'border-red-500' : ''}`}
+                  className={`ev-input ev-formal-input w-full ${errors.phoneNumber ? 'ev-input-error' : ''}`}
                   placeholder="Enter your phone number"
                 />
+                <p className="ev-formal-helper">We’ll use this to contact you.</p>
                 {errors.phoneNumber && (
-                  <p className="mt-1 text-sm text-red-400">{errors.phoneNumber}</p>
+                  <p className="mt-4 text-sm text-red-400">{errors.phoneNumber}</p>
                 )}
               </div>
 
               {/* Estimated Time Field */}
-              <div>
-                <label htmlFor="estimatedTime" className="block text-sm font-medium text-gray-300 mb-2">
+              <div className="ev-formal-field">
+                <label htmlFor="estimatedTime" className="ev-formal-label block">
                   Estimated Time Needed (minutes)
                 </label>
                 <input
@@ -247,11 +248,12 @@ const ChargingRequestForm = () => {
                   value={formData.estimatedTime}
                   onChange={handleChange}
                   min="1"
-                  className={`ev-input w-full ${errors.estimatedTime ? 'border-red-500' : ''}`}
+                  className={`ev-input ev-formal-input w-full ${errors.estimatedTime ? 'ev-input-error' : ''}`}
                   placeholder="How long do you need to charge?"
                 />
+                <p className="ev-formal-helper">Optional: helps helpers plan time.</p>
                 {errors.estimatedTime && (
-                  <p className="mt-1 text-sm text-red-400">{errors.estimatedTime}</p>
+                  <p className="mt-4 text-sm text-red-400">{errors.estimatedTime}</p>
                 )}
               </div>
 
@@ -259,7 +261,7 @@ const ChargingRequestForm = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="ev-neon-button w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                className="ev-formal-button w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center">
@@ -270,14 +272,16 @@ const ChargingRequestForm = () => {
                   'Create Charging Request'
                 )}
               </button>
-            </form>
+          </form>
 
-            {/* Back Link */}
-            <div className="text-center mt-6">
-              <a href="/dashboard" className="text-cyan-400 hover:text-cyan-300 transition-colors">
-                ← Back to Dashboard
-              </a>
-            </div>
+          {/* Back Link */}
+          <div className="pt-4">
+            <div className="ev-formal-divider"></div>
+          </div>
+          <div className="text-center pt-4">
+            <a href="/dashboard" className="ev-formal-link font-medium">
+              ← Back to Dashboard
+            </a>
           </div>
         </div>
       </div>

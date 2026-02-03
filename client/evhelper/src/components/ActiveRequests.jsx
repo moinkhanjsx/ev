@@ -127,24 +127,24 @@ const ActiveRequests = () => {
 
   return (
     <div className="min-h-screen py-8 relative z-10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="ev-container">
         {/* Header */}
-        <div className="ev-card ev-card-spacing">
+        <div className="ev-formal-card ev-card-spacing">
           <div className="ev-section">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <button
                   onClick={() => navigate('/dashboard')}
-                  className="ev-button-secondary w-full sm:w-auto"
+                  className="ev-formal-button w-full sm:w-auto"
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                   Back
                 </button>
                 <div>
-                  <h1 className="ev-heading-1 ev-neon-text">Active Requests</h1>
-                  <p className="ev-text-muted">
+                  <h1 className="ev-formal-title">Active Requests</h1>
+                  <p className="ev-formal-subtitle">
                     Real-time requests in {state.user?.city || 'your city'}
                   </p>
                 </div>
@@ -158,19 +158,19 @@ const ActiveRequests = () => {
         </div>
 
         {/* Content */}
-        <div className="ev-glass-card">
-          <div className="p-6 lg:p-8">
+        <div className="ev-formal-card">
+          <div className="p-4 sm:p-6 lg:p-8">
             {loading ? (
               <div className="text-center py-12">
                 <div className="ev-loading mx-auto mb-4"></div>
-                <p className="text-gray-400">Loading active requests...</p>
+                <p className="ev-formal-subtitle">Loading active requests...</p>
               </div>
             ) : error ? (
               <div className="text-center py-12">
                 <div className="text-red-400 mb-4">{error}</div>
                 <button 
                   onClick={fetchRequests}
-                  className="ev-neon-button"
+                  className="ev-formal-button"
                 >
                   Refresh Requests
                 </button>
@@ -186,43 +186,42 @@ const ActiveRequests = () => {
                 <p className="text-sm text-gray-500 mt-2">Be the first to help or check back later</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="ev-stack-6">
                 {requests.map((request) => (
-                  <div key={request._id} className="ev-glass-card p-4 sm:p-6 hover:scale-[1.02] transition-transform duration-300">
+                  <div key={request._id} className="ev-formal-card ev-formal-compact p-4 sm:p-6 hover:scale-[1.02] transition-transform duration-300">
                     <div className="flex flex-col lg:flex-row items-start justify-between gap-4 lg:gap-6">
                       <div className="flex-1 lg:w-1/2">
-                        <div className="flex items-center gap-2 sm:gap-3 mb-4">
-                          <div className="text-2xl sm:text-3xl">{getStatusIcon(request.status)}</div>
-                          <div className="flex flex-col gap-1 sm:gap-2">
-                            <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(request.status)}`}>
-                              {request.status}
+                        <div className="flex items-center gap-3 sm:gap-4 mb-4">
+                          <div className="ev-formal-chip-icon text-base sm:text-lg">
+                            {getStatusIcon(request.status)}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`ev-formal-chip ${getStatusClass(request.status)}`}>
+                              {request.status} &amp; {request.urgency?.toUpperCase()} PRIORITY
                             </span>
                             {isMyRequest(request) && (
-                              <span className="px-1 sm:px-2 py-1 text-xs font-semibold bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded">
+                              <span className="ev-formal-chip bg-amber-500/10 border-amber-500/30 text-amber-200">
                                 Your Request
                               </span>
                             )}
-                            <span className={`px-1 sm:px-2 py-1 text-xs font-semibold rounded ${getUrgencyColor(request.urgency)}`}>
-                              {request.urgency?.toUpperCase()} PRIORITY
-                            </span>
                           </div>
                         </div>
                         
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3 lg:gap-4 mb-4">
                           <div>
                             <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-1">📍 Location</h4>
-                            <p className="text-xs sm:text-sm text-gray-400">{request.location}</p>
+                            <p className="text-xs sm:text-sm ev-formal-subtitle">{request.location}</p>
                           </div>
                           <div>
                             <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-1">📞 Contact</h4>
-                            <p className="text-xs sm:text-sm text-gray-400">{request.phoneNumber || request.contactInfo}</p>
+                            <p className="text-xs sm:text-sm ev-formal-subtitle">{request.phoneNumber || request.contactInfo}</p>
                           </div>
                         </div>
 
                         {request.message && (
                           <div className="mb-4">
                             <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-1">💬 Message</h4>
-                            <p className="text-xs sm:text-sm text-gray-400 wrap-break-words">{request.message}</p>
+                            <p className="text-xs sm:text-sm ev-formal-subtitle break-words">{request.message}</p>
                           </div>
                         )}
 
@@ -239,7 +238,7 @@ const ActiveRequests = () => {
                         <button
                           onClick={() => handleAcceptRequest(request._id)}
                           disabled={acceptingIds.has(request._id)}
-                          className="ev-neon-button w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base ev-charging-pulse disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="ev-formal-button w-full sm:w-auto text-sm sm:text-base ev-charging-pulse disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {acceptingIds.has(request._id) ? 'Accepting…' : 'Accept Request'}
                         </button>

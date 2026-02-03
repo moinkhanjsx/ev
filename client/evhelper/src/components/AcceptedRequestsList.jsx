@@ -72,7 +72,7 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest }) => {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-300 mb-1">💬 Message</h4>
-                  <p className="text-gray-400 wrap-break-words">{request.message}</p>
+                  <p className="text-gray-400 break-words">{request.message}</p>
                 </div>
               </div>
 

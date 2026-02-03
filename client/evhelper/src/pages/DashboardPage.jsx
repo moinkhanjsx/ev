@@ -256,20 +256,20 @@ const DashboardPage = () => {
     <div className="min-h-screen py-8 relative z-10">
       <div className="ev-container">
         {/* Header */}
-        <div className="ev-card ev-card-spacing">
+        <div className="ev-formal-card ev-card-spacing">
           <div className="ev-section">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full ev-charging-pulse">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full ev-charging-pulse ev-formal-badge">
+                  <svg className="w-6 h-6 ev-formal-icon" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                   </svg>
                 </div>
-                <h1 className="ev-heading-1 ev-neon-text">Dashboard</h1>
+                <h1 className="ev-formal-title">Dashboard</h1>
               </div>
               <button
                 onClick={handleLogout}
-                className="ev-button-danger w-full sm:w-auto"
+                className="ev-formal-button w-full sm:w-auto"
               >
                 Sign Out
               </button>
@@ -281,21 +281,21 @@ const DashboardPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
           <a
             href="/charging-request"
-            className="ev-glass-card group cursor-pointer transition-all duration-300 hover:scale-105"
+            className="ev-formal-card ev-formal-compact group cursor-pointer transition-all duration-300 hover:scale-105"
           >
-            <div className="p-6 flex items-center justify-between">
+            <div className="p-4 sm:p-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-linear-to-br from-cyan-400 to-blue-500 rounded-lg flex items-center justify-center group-hover:ev-charging-pulse">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center ev-charging-pulse ev-formal-badge">
+                  <svg className="w-6 h-6 ev-formal-icon" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                   </svg>
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-white">Create Charging Request</h3>
-                  <p className="text-gray-400 text-sm">Get emergency charging assistance</p>
+                  <p className="ev-formal-subtitle">Get emergency charging assistance</p>
                 </div>
               </div>
-              <svg className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 ev-formal-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
@@ -303,21 +303,21 @@ const DashboardPage = () => {
 
           <a
             href="/active-requests"
-            className="ev-glass-card group cursor-pointer transition-all duration-300 hover:scale-105"
+            className="ev-formal-card ev-formal-compact group cursor-pointer transition-all duration-300 hover:scale-105"
           >
-            <div className="p-6 flex items-center justify-between">
+            <div className="p-4 sm:p-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-linear-to-br from-green-400 to-blue-500 rounded-lg flex items-center justify-center group-hover:ev-charging-pulse">
-                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center ev-charging-pulse ev-formal-badge">
+                  <svg className="w-6 h-6 ev-formal-icon" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                   </svg>
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-white">View Active Requests</h3>
-                  <p className="text-gray-400 text-sm">Help other EV owners in your city</p>
+                  <p className="ev-formal-subtitle">Help other EV owners in your city</p>
                 </div>
               </div>
-              <svg className="w-5 h-5 text-gray-400 group-hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 ev-formal-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
@@ -325,11 +325,11 @@ const DashboardPage = () => {
         </div>
 
         {/* User Info Card */}
-        <div className="ev-glass-card mb-8">
+        <div className="ev-formal-card ev-formal-compact mb-8">
           <div className="p-4 sm:p-6 lg:p-8">
             <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
               <div className="shrink-0">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full flex items-center justify-center">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center ev-formal-badge">
                   <span className="text-white font-bold text-xl sm:text-2xl">
                     {state.user?.name?.charAt(0) || 'U'}
                   </span>
@@ -337,10 +337,10 @@ const DashboardPage = () => {
               </div>
               <div className="flex-1 text-center sm:text-left">
                 <h2 className="text-xl sm:text-2xl font-bold text-white">{state.user?.name}</h2>
-                <p className="text-gray-400 text-sm sm:text-base">{state.user?.email}</p>
-                <p className="text-gray-400 text-sm sm:text-base">{state.user?.city}</p>
-                <div className="mt-2 inline-flex items-center px-3 py-1 bg-cyan-500/20 border border-cyan-500/50 rounded-full">
-                  <span className="text-cyan-300 text-xs sm:text-sm font-medium">Token Balance: {state.user?.tokenBalance || 0}</span>
+                <p className="ev-formal-subtitle">{state.user?.email}</p>
+                <p className="ev-formal-subtitle">{state.user?.city}</p>
+                <div className="mt-3">
+                  <span className="ev-formal-pill">Token Balance: {state.user?.tokenBalance || 0}</span>
                 </div>
               </div>
             </div>
@@ -348,9 +348,9 @@ const DashboardPage = () => {
         </div>
 
         {/* Charging Requests Section */}
-        <div className="ev-glass-card">
-          <div className="p-6 lg:p-8">
-            <h2 className="text-2xl font-bold text-white mb-6">Your Charging Requests</h2>
+        <div className="ev-formal-card">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <h2 className="ev-formal-title mb-6">Your Charging Requests</h2>
             
             {loading ? (
               <div className="text-center py-12">
@@ -362,13 +362,13 @@ const DashboardPage = () => {
                 <div className="text-red-400 mb-4">{error}</div>
                 <button 
                   onClick={fetchRequests}
-                  className="ev-neon-button"
+                  className="ev-formal-button"
                 >
                   Try Again
                 </button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="ev-stack-6">
                 {requests.length === 0 ? (
                   <div className="text-center py-12 text-gray-400">
                     <div className="mb-4">
@@ -381,11 +381,11 @@ const DashboardPage = () => {
                   </div>
                 ) : (
                   requests.map((request) => (
-                    <div key={request._id} className="ev-glass-card p-6">
+                    <div key={request._id} className="ev-formal-card ev-formal-compact p-4 sm:p-6">
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <h3 className="text-lg font-medium text-white">Request #{request._id.slice(-6)}</h3>
-                          <p className="text-sm text-gray-400">
+                          <p className="ev-formal-subtitle">
                             Created: {new Date(request.createdAt).toLocaleDateString()}
                           </p>
                         </div>
@@ -399,44 +399,44 @@ const DashboardPage = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <h4 className="text-sm font-medium text-gray-300">Location</h4>
-                            <p className="text-gray-400">{request.location}</p>
+                            <p className="ev-formal-subtitle">{request.location}</p>
                           </div>
                           <div>
                             <h4 className="text-sm font-medium text-gray-300">Urgency</h4>
-                            <p className="text-gray-400 capitalize">{request.urgency}</p>
+                            <p className="ev-formal-subtitle capitalize">{request.urgency}</p>
                           </div>
                         </div>
 
                         {request.message && (
                           <div>
                             <h4 className="text-sm font-medium text-gray-300">Message</h4>
-                            <p className="text-gray-400">{request.message}</p>
+                            <p className="ev-formal-subtitle">{request.message}</p>
                           </div>
                         )}
 
                         {request.phoneNumber && (
                           <div>
                             <h4 className="text-sm font-medium text-gray-300">Phone Number</h4>
-                            <p className="text-gray-400">{request.phoneNumber}</p>
+                            <p className="ev-formal-subtitle">{request.phoneNumber}</p>
                           </div>
                         )}
                         {request.contactInfo && (
                           <div>
                             <h4 className="text-sm font-medium text-gray-300">Contact Info</h4>
-                            <p className="text-gray-400">{request.contactInfo}</p>
+                            <p className="ev-formal-subtitle">{request.contactInfo}</p>
                           </div>
                         )}
 
                         {request.estimatedTime && (
                           <div>
                             <h4 className="text-sm font-medium text-gray-300">Estimated Time</h4>
-                            <p className="text-gray-400">{request.estimatedTime} minutes</p>
+                            <p className="ev-formal-subtitle">{request.estimatedTime} minutes</p>
                           </div>
                         )}
                       </div>
 
                       <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-700">
-                        <div className="text-sm text-gray-400">
+                        <div className="ev-formal-subtitle">
                           {request.tokenCost} tokens • Status: {request.status}
                         </div>
                          
@@ -445,7 +445,7 @@ const DashboardPage = () => {
                           <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2">
                             <button 
                               onClick={() => handleCancelRequest(request._id)}
-                              className="w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg hover:bg-red-500/30 transition-colors text-sm sm:text-base"
+                              className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
                             >
                               Cancel Request
                             </button>
@@ -456,7 +456,7 @@ const DashboardPage = () => {
                           <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:items-center">
                             <button 
                               onClick={() => handleCompleteRequest(request._id)}
-                              className="w-full sm:w-auto px-3 sm:px-4 py-2 sm:py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors text-sm sm:text-base"
+                              className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
                             >
                               Mark as Completed
                             </button>
@@ -482,9 +482,9 @@ const DashboardPage = () => {
 
         {/* Helper's Accepted Requests Section */}
         {acceptedRequests.length > 0 && (
-          <div className="ev-glass-card mt-8">
-            <div className="p-6 lg:p-8">
-              <h2 className="text-2xl font-bold text-white mb-6">Your Active Helper Requests</h2>
+          <div className="ev-formal-card mt-8">
+            <div className="p-4 sm:p-6 lg:p-8">
+              <h2 className="ev-formal-title mb-6">Your Active Helper Requests</h2>
               
               {helperLoading ? (
                 <div className="text-center py-12">

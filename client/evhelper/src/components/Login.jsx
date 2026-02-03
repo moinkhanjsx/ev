@@ -71,55 +71,59 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative z-10">
+    <div className="min-h-screen flex flex-col justify-center py-12 sm:py-16 sm:px-6 lg:px-8 relative z-10">
       <div className="ev-container ev-mobile-center">
-        <div className="ev-card ev-mobile-full-width max-w-md">
-          <div className="ev-section ev-text-center">
-            <div className="mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-linear-to-br from-cyan-400 to-blue-500 rounded-full ev-charging-pulse">
-                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                </svg>
-              </div>
+        <div className="ev-formal-card ev-mobile-full-width max-w-md p-8 sm:p-12">
+          <div className="ev-section ev-text-center mb-10">
+            <div className="mb-4">
+              <div className="ev-formal-mark">EV</div>
             </div>
-            <h1 className="ev-heading-1 ev-neon-text mb-2">
-              EV Helper
+            <h1 className="ev-formal-title mb-2">
+              Sign In
             </h1>
-            <p className="ev-text-muted">
-              Welcome back to future of charging
+            <p className="ev-formal-subtitle">
+              Access your EV Helper account
             </p>
           </div>
 
           {/* Error Display */}
           {errors.general && (
-            <div className="ev-form-field p-4 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg backdrop-blur-sm">
+            <div className="ev-form-field p-5 mb-6 bg-red-500/20 border border-red-500/50 text-red-300 rounded-lg backdrop-blur-sm">
               <div className="ev-text-body">{errors.general}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="ev-formal-form">
             {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+            <div className="ev-formal-field">
+              <label htmlFor="email" className="ev-formal-label block">
                 Email Address
               </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className={`ev-input w-full ${errors.email ? 'border-red-500' : ''}`}
-                placeholder="Enter your email"
-              />
+              <div className="relative">
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className={`ev-input ev-formal-input ev-input-with-icon w-full ${errors.email ? 'ev-input-error' : ''}`}
+                  placeholder="Enter your email"
+                />
+                <span className="ev-input-icon" aria-hidden="true">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                </span>
+              </div>
+              <p className="ev-formal-helper">Use the email you registered with.</p>
               {errors.email && (
-                <p className="mt-1 text-sm text-red-400">{errors.email}</p>
+                <p className="mt-4 text-sm text-red-400">{errors.email}</p>
               )}
             </div>
 
             {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+            <div className="ev-formal-field">
+              <label htmlFor="password" className="ev-formal-label block">
                 Password
               </label>
               <div className="relative">
@@ -129,12 +133,18 @@ const Login = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`ev-input w-full pr-12 ${errors.password ? 'border-red-500' : ''}`}
+                  className={`ev-input ev-formal-input ev-input-with-icon ev-input-with-toggle w-full ${errors.password ? 'ev-input-error' : ''}`}
                   placeholder="Enter your password"
                 />
+                <span className="ev-input-icon" aria-hidden="true">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c1.657 0 3 1.343 3 3v2H9v-2c0-1.657 1.343-3 3-3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 11V8a6 6 0 1112 0v3" />
+                  </svg>
+                </span>
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 px-3 py-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                  className="absolute inset-y-0 ev-input-toggle text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? (
@@ -149,21 +159,22 @@ const Login = () => {
                   )}
                 </button>
               </div>
+              <p className="ev-formal-helper">Keep this private and secure.</p>
               {errors.password && (
-                <p className="mt-1 text-sm text-red-400">{errors.password}</p>
+                <p className="mt-4 text-sm text-red-400">{errors.password}</p>
               )}
             </div>
 
             {/* Remember Me */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-3">
                 <input
                   id="remember"
                   name="remember"
                   type="checkbox"
                   className="h-4 w-4 text-cyan-500 focus:ring-cyan-500 border-gray-600 rounded bg-gray-800"
                 />
-                <label htmlFor="remember" className="ml-2 block text-sm text-gray-300">
+                <label htmlFor="remember" className="block text-sm text-gray-300">
                   Remember me
                 </label>
               </div>
@@ -173,7 +184,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={state.loading}
-              className="ev-neon-button w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ev-formal-button w-full disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {state.loading ? (
                 <span className="flex items-center justify-center">
@@ -186,10 +197,13 @@ const Login = () => {
             </button>
 
             {/* Register Link */}
-            <div className="text-center">
+            <div className="pt-4">
+              <div className="ev-formal-divider"></div>
+            </div>
+            <div className="text-center pt-4">
               <p className="text-sm text-gray-400">
                 Don't have an account?{' '}
-                <Link to="/register" className="font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
+                <Link to="/register" className="ev-formal-link font-medium">
                   Sign up
                 </Link>
               </p>

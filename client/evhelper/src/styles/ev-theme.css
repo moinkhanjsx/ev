@@ -95,7 +95,7 @@ body {
 }
 
 .ev-glass-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-4px) scale(1.02);
   box-shadow: var(--ev-shadow-lg), var(--ev-shadow-glow);
   border-color: var(--ev-border-glow);
 }
@@ -156,6 +156,11 @@ body {
   border-color: var(--ev-accent-blue);
   box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.ev-input.ev-input-error {
+  border-color: var(--ev-accent-red);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
 .ev-input::placeholder {
@@ -272,7 +277,8 @@ body {
   }
   
   .ev-container {
-    padding: 0 var(--ev-space-4);
+    /* Increase side padding on small screens so content doesn't feel edge-to-edge */
+    padding: 0 16px;
   }
   
   .ev-card {
@@ -504,7 +510,7 @@ body {
 }
 
 .ev-section {
-  margin-bottom: var(--ev-space-8);
+  margin-bottom: var(--ev-space-6);
 }
 
 .ev-card-spacing {
@@ -543,6 +549,12 @@ body {
   gap: var(--ev-space-3);
 }
 
+.ev-stack-6 {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 /* Improved Button System */
 .ev-button-primary {
   background: linear-gradient(135deg, var(--ev-accent-blue), var(--ev-accent-cyan));
@@ -570,6 +582,9 @@ body {
   font-weight: var(--ev-btn-font-weight);
   font-size: 14px;
   height: var(--ev-btn-height-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   transition: all 0.3s ease;
   backdrop-filter: var(--ev-glass-blur);
   cursor: pointer;
@@ -654,6 +669,246 @@ body {
   font-size: 14px;
   line-height: 1.4;
   color: var(--ev-text-muted);
+}
+
+/* Formal Login Styling */
+.ev-formal-card {
+  background: rgba(18, 18, 24, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 32px;
+}
+
+.ev-formal-card::before {
+  content: "";
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  margin-bottom: 20px;
+  background: linear-gradient(90deg, rgba(0, 212, 255, 0.0), rgba(0, 212, 255, 0.35), rgba(0, 212, 255, 0.0));
+}
+
+.ev-formal-card.ev-formal-compact::before {
+  display: none;
+  margin-bottom: 0;
+}
+
+.ev-formal-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 212, 255, 0.2));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--ev-text-primary);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.ev-formal-badge {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 212, 255, 0.16));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.ev-formal-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--ev-text-primary);
+}
+
+.ev-formal-subtitle {
+  font-size: 14px;
+  color: var(--ev-text-muted);
+}
+
+.ev-formal-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ev-formal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.ev-formal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ev-formal-input {
+  padding: 18px 18px;
+  border-radius: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.3px;
+  background: linear-gradient(180deg, rgba(22, 26, 38, 0.9), rgba(10, 12, 18, 0.95));
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.ev-formal-input:focus {
+  border-color: rgba(0, 212, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2), 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.ev-formal-input:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.ev-formal-button {
+  background: #101826;
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  color: var(--ev-text-primary);
+  padding: 14px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.ev-formal-button:hover {
+  background: #0c2033;
+  border-color: rgba(0, 212, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.ev-formal-link {
+  color: #9fe7ff;
+  text-decoration: none;
+  letter-spacing: 0.3px;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.ev-formal-link:hover {
+  color: #e6fbff;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.ev-formal-helper {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ev-formal-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0 0;
+}
+
+.ev-input-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.ev-formal-icon {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.ev-formal-chevron {
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 0.2s ease;
+}
+
+.ev-formal-chevron:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ev-formal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ev-formal-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  background: rgba(0, 212, 255, 0.12);
+  color: #9fe7ff;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+.ev-formal-chip-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 212, 255, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ev-formal-chip-select {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.ev-formal-chip-select:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateY(-1px);
+}
+
+.ev-formal-chip-select-active {
+  border-color: rgba(0, 212, 255, 0.5);
+  background: rgba(0, 212, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+.ev-input-with-icon {
+  padding-left: 42px;
+}
+
+.ev-input-with-toggle {
+  padding-right: 56px;
+}
+
+.ev-input-toggle {
+  right: 8px;
+  padding: 0 8px;
+}
+
+@media (min-width: 640px) {
+  .ev-formal-card {
+    padding: 48px;
+  }
 }
 
 /* Focus Styles for Accessibility */
