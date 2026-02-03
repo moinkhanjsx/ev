@@ -29,7 +29,8 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 // Ensure CORS preflight requests are handled for all routes.
-app.options('*', cors(corsOptions));
+// Express 5 does not accept '*' as a route string; use a regex route instead.
+app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 // Serve static files from React build (production)
