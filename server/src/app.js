@@ -19,19 +19,17 @@ connectDB();
 const app = express();
 
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:5000',
-    'https://ev-moinkhan.vercel.app',
-    'https://ev-4let.onrender.com'
-  ],
+  // Reflect the requesting origin. This prevents production breakage when the
+  // frontend domain changes (e.g. new Vercel deployment URL) and ensures
+  // preflight requests receive Access-Control-Allow-Origin.
+  origin: true,
   credentials: true,
   optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
+// Ensure CORS preflight requests are handled for all routes.
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 // Serve static files from React build (production)
