@@ -33,6 +33,14 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
+// Add security headers middleware
+app.use((req, res, next) => {
+  // Allow postMessage and cross-origin communication
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  next();
+});
+
 // Serve static files from React build (production)
 const distPath = path.join(__dirname, '../../client/evhelper/dist');
 const fallbackPath = path.join(__dirname, '../public');
@@ -44,6 +52,9 @@ console.log('DEBUG: Serving static files from:', staticPath);
 app.use(express.static(staticPath, { 
   setHeaders: (res) => {
     res.set('Cache-Control', 'public, max-age=3600');
+    // Security headers to allow postMessage and prevent COOP blocking
+    res.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    res.set('Cross-Origin-Embedder-Policy', 'unsafe-none');
   }
 }));
 

@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import RequestChat from "./RequestChat";
 
-const RequestChatDrawer = ({ open, onClose, requestId, peerName }) => {
+const RequestChatDrawer = ({ open, onClose, requestId, peerName, requestStatus }) => {
   useEffect(() => {
     if (!open) return;
 
@@ -36,7 +36,7 @@ const RequestChatDrawer = ({ open, onClose, requestId, peerName }) => {
           </button>
         </div>
         <div className="ev-drawer-body">
-          <RequestChat requestId={requestId} peerName={peerName} />
+          <RequestChat requestId={requestId} peerName={peerName} requestStatus={requestStatus} />
         </div>
       </div>
     </div>

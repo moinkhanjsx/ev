@@ -3,12 +3,14 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/auth.js";
 import socketService from "../utils/socket.js";
 
-const RequestChat = ({ requestId, peerName }) => {
+const RequestChat = ({ requestId, peerName, requestStatus }) => {
   const { state } = useAuth();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [chatDisabled, setChatDisabled] = useState(false);
+  const [chatNotice, setChatNotice] = useState("");
   const bottomRef = useRef(null);
 
   const myUserId = (state.user?._id || state.user?.id || "").toString();
@@ -21,6 +23,14 @@ const RequestChat = ({ requestId, peerName }) => {
       setError("");
 
       try {
+        if (requestStatus && !["ACCEPTED", "COMPLETED"].includes(requestStatus)) {
+          setChatDisabled(true);
+          setChatNotice("Chat is available only after a request is accepted.");
+        } else {
+          setChatDisabled(false);
+          setChatNotice("");
+        }
+
         const response = await api.get(`/charging/requests/${requestId}/messages`);
         if (isMounted) {
           setMessages(response.data?.messages || []);
@@ -60,16 +70,43 @@ const RequestChat = ({ requestId, peerName }) => {
 
     socketService.on("chat-message", onChatMessage);
 
+    const onRequestExpired = (payload) => {
+      const id = payload?.request?.id || payload?.requestId;
+      if (id !== requestId) return;
+      setChatDisabled(true);
+      setChatNotice("This request expired. Chat is now closed.");
+      setError("Chat closed due to expiration.");
+      socketService.emit("leave-request", { requestId });
+    };
+
+    const onRequestCanceled = (payload) => {
+      const id = payload?.request?.id || payload?.requestId;
+      if (id !== requestId) return;
+      setChatDisabled(true);
+      setChatNotice("This request was canceled. Chat is now closed.");
+      setError("Chat closed due to cancellation.");
+      socketService.emit("leave-request", { requestId });
+    };
+
+    socketService.on("request-expired", onRequestExpired);
+    socketService.on("request-expired-notification", onRequestExpired);
+    socketService.on("request-canceled", onRequestCanceled);
+    socketService.on("request-canceled-by-requester", onRequestCanceled);
+
     return () => {
       socketService.emit("leave-request", { requestId });
       socketService.off("chat-message", onChatMessage);
+      socketService.off("request-expired", onRequestExpired);
+      socketService.off("request-expired-notification", onRequestExpired);
+      socketService.off("request-canceled", onRequestCanceled);
+      socketService.off("request-canceled-by-requester", onRequestCanceled);
     };
   }, [requestId, state.token, state.user?.city]);
 
   const handleSend = async (event) => {
     event.preventDefault();
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || chatDisabled) return;
 
     setText("");
     setError("");
@@ -82,7 +119,11 @@ const RequestChat = ({ requestId, peerName }) => {
     try {
       await api.post(`/charging/requests/${requestId}/messages`, { text: trimmed });
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to send message");
+      const message = err.response?.data?.message || "Failed to send message";
+      setError(message);
+      if (message.toLowerCase().includes("chat is available only after")) {
+        setChatDisabled(true);
+      }
     }
   };
 
@@ -157,6 +198,7 @@ const RequestChat = ({ requestId, peerName }) => {
         </div>
       )}
 
+      {chatNotice && <div className="ev-chat-error">{chatNotice}</div>}
       {error && <div className="ev-chat-error">{error}</div>}
 
       <form onSubmit={handleSend} className="ev-chat-input-row mt-4">
@@ -166,8 +208,9 @@ const RequestChat = ({ requestId, peerName }) => {
           onChange={(event) => setText(event.target.value)}
           className="ev-input ev-formal-input w-full"
           placeholder="Type a message..."
+          disabled={chatDisabled}
         />
-        <button type="submit" className="ev-formal-button">
+        <button type="submit" className="ev-formal-button" disabled={chatDisabled}>
           Send
         </button>
       </form>

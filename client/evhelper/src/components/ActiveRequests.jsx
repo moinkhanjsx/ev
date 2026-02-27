@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import api, { authAPI } from '../utils/auth.js';
+import { api } from '../utils/auth.js';
+import socketService from '../utils/socket.js';
 
 const ActiveRequests = () => {
   const navigate = useNavigate();
@@ -10,12 +11,38 @@ const ActiveRequests = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [acceptingIds, setAcceptingIds] = useState(() => new Set());
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     if (state.isAuthenticated && state.user?.city) {
       fetchRequests();
     }
   }, [state.isAuthenticated, state.user?.city]);
+
+  useEffect(() => {
+    if (!state.isAuthenticated || !state.user?.city) return;
+
+    socketService.connect(null, state.user.city, state.token);
+
+    const onRequestExpired = (data) => {
+      const id = data?.requestId || data?.request?.id || data?._id;
+      if (!id) return;
+      setRequests((prev) => prev.filter((r) => r._id !== id));
+      setToast('A request expired');
+    };
+
+    socketService.on('request-expired-notification', onRequestExpired);
+
+    return () => {
+      socketService.off('request-expired-notification', onRequestExpired);
+    };
+  }, [state.isAuthenticated, state.user?.city, state.token]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -89,6 +116,7 @@ const ActiveRequests = () => {
       case 'ACCEPTED': return 'ev-status-accepted';
       case 'COMPLETED': return 'ev-status-completed';
       case 'CANCELED': return 'ev-status-canceled';
+      case 'EXPIRED': return 'ev-status-expired';
       default: return 'ev-status-completed';
     }
   };
@@ -99,6 +127,7 @@ const ActiveRequests = () => {
       case 'ACCEPTED': return '🤝';
       case 'COMPLETED': return '✅';
       case 'CANCELED': return '❌';
+      case 'EXPIRED': return '⌛';
       default: return '⏳';
     }
   };
@@ -127,6 +156,11 @@ const ActiveRequests = () => {
 
   return (
     <div className="min-h-screen py-8 relative z-10">
+      {toast && (
+        <div className="ev-toast-container">
+          <div className="ev-toast ev-toast-expired">{toast}</div>
+        </div>
+      )}
       <div className="ev-container">
         {/* Header */}
         <div className="ev-formal-card ev-card-spacing">

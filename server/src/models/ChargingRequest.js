@@ -22,7 +22,7 @@ const chargingRequestSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["OPEN", "ACCEPTED", "COMPLETED", "CANCELED"],
+      enum: ["OPEN", "ACCEPTED", "COMPLETED", "CANCELED", "EXPIRED"],
       default: "OPEN",
     },
 
@@ -83,6 +83,10 @@ const chargingRequestSchema = new mongoose.Schema(
     },
 
     canceledAt: {
+      type: Date,
+      default: null,
+    },
+    expiredAt: {
       type: Date,
       default: null,
     },

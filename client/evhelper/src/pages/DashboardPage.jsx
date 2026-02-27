@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import api from '../utils/auth.js';
+import { api } from '../utils/auth.js';
 import socketService from '../utils/socket.js';
 import AcceptedRequestsList from '../components/AcceptedRequestsList';
 import RequestChatDrawer from '../components/RequestChatDrawer';
@@ -12,7 +12,8 @@ const DashboardPage = () => {
   const [loading, setLoading] = React.useState(true);
   const [helperLoading, setHelperLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
-  const [chatDrawer, setChatDrawer] = React.useState({ open: false, requestId: null, peerName: null });
+  const [chatDrawer, setChatDrawer] = React.useState({ open: false, requestId: null, peerName: null, requestStatus: null });
+  const [toast, setToast] = React.useState(null);
 
   useEffect(() => {
     // Connect to socket and join user's city room
@@ -64,10 +65,28 @@ const DashboardPage = () => {
         fetchAcceptedRequests();
       };
 
+      const onRequestExpiredNotification = (data) => {
+        const id = data?.requestId || data?.id || data?._id;
+        if (!id) return;
+        setRequests((prev) => prev.map((r) => (r._id === id ? { ...r, status: 'EXPIRED' } : r)));
+        fetchAcceptedRequests();
+        setToast('A request expired');
+      };
+
+      const onRequestExpired = (data) => {
+        const id = data?.request?.id || data?.requestId;
+        if (!id) return;
+        setRequests((prev) => prev.map((r) => (r._id === id ? { ...r, status: 'EXPIRED' } : r)));
+        fetchAcceptedRequests();
+        setToast('Your request expired');
+      };
+
       socketService.on('charging-request', onChargingRequest);
       socketService.on('request-taken', onRequestTaken);
       socketService.on('request-completed-notification', onRequestCompletedNotification);
       socketService.on('request-canceled-notification', onRequestCanceledNotification);
+      socketService.on('request-expired-notification', onRequestExpiredNotification);
+      socketService.on('request-expired', onRequestExpired);
 
       // Initial load
       fetchRequests();
@@ -78,9 +97,17 @@ const DashboardPage = () => {
         socketService.off('request-taken', onRequestTaken);
         socketService.off('request-completed-notification', onRequestCompletedNotification);
         socketService.off('request-canceled-notification', onRequestCanceledNotification);
+        socketService.off('request-expired-notification', onRequestExpiredNotification);
+        socketService.off('request-expired', onRequestExpired);
       };
     }
   }, [state.isAuthenticated, state.user?.city]);
+
+  React.useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -227,6 +254,7 @@ const DashboardPage = () => {
       case 'ACCEPTED': return 'ev-status-accepted';
       case 'COMPLETED': return 'ev-status-completed';
       case 'CANCELED': return 'ev-status-canceled';
+      case 'EXPIRED': return 'ev-status-expired';
       default: return 'ev-status-completed';
     }
   };
@@ -237,6 +265,7 @@ const DashboardPage = () => {
       case 'ACCEPTED': return '🤝';
       case 'COMPLETED': return '✅';
       case 'CANCELED': return '❌';
+      case 'EXPIRED': return '⌛';
       default: return '⏳';
     }
   };
@@ -256,6 +285,11 @@ const DashboardPage = () => {
 
   return (
     <div className="min-h-screen py-8 relative z-10">
+      {toast && (
+        <div className="ev-toast-container">
+          <div className="ev-toast ev-toast-expired">{toast}</div>
+        </div>
+      )}
       <div className="ev-container">
         {/* Header */}
         <div className="ev-formal-card ev-card-spacing">
@@ -307,7 +341,8 @@ const DashboardPage = () => {
                             setChatDrawer({
                               open: true,
                               requestId: request._id,
-                              peerName: request.helperId?.name || 'Helper'
+                              peerName: request.helperId?.name || 'Helper',
+                              requestStatus: request.status
                             })
                           }
                           className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
@@ -333,7 +368,8 @@ const DashboardPage = () => {
                             setChatDrawer({
                               open: true,
                               requestId: request._id,
-                              peerName: request.requesterId?.name || 'Requester'
+                              peerName: request.requesterId?.name || 'Requester',
+                              requestStatus: request.status
                             })
                           }
                           className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
@@ -538,7 +574,8 @@ const DashboardPage = () => {
                                   setChatDrawer({
                                     open: true,
                                     requestId: request._id,
-                                    peerName: request.helperId?.name || "Helper"
+                                    peerName: request.helperId?.name || "Helper",
+                                    requestStatus: request.status
                                   })
                                 }
                                 className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
@@ -584,7 +621,8 @@ const DashboardPage = () => {
                     setChatDrawer({
                       open: true,
                       requestId: request._id,
-                      peerName: request.requesterId?.name || "Requester"
+                      peerName: request.requesterId?.name || "Requester",
+                      requestStatus: request.status
                     })
                   }
                 />
@@ -594,9 +632,10 @@ const DashboardPage = () => {
         )}
         <RequestChatDrawer
           open={chatDrawer.open}
-          onClose={() => setChatDrawer({ open: false, requestId: null, peerName: null })}
+          onClose={() => setChatDrawer({ open: false, requestId: null, peerName: null, requestStatus: null })}
           requestId={chatDrawer.requestId}
           peerName={chatDrawer.peerName}
+          requestStatus={chatDrawer.requestStatus}
         />
       </div>
     </div>

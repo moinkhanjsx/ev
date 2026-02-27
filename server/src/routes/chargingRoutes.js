@@ -54,6 +54,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
     const { location, urgency, message, phoneNumber, contactInfo, contact, estimatedTime, timeAvailable } = req.body;
     const userId = req.user._id;
     const userCity = req.user.city;
+    let tokensDeducted = false;
 
     const rawPhoneNumber = phoneNumber ?? contactInfo ?? contact;
     const normalizedPhoneNumber = typeof rawPhoneNumber === "string" ? rawPhoneNumber.trim() : "";
@@ -124,6 +125,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
       if (!updatedUser) {
         throw new Error("Failed to update user tokens");
       }
+      tokensDeducted = true;
 
       // Create charging request
       const request = await ChargingRequest.create({
@@ -200,6 +202,28 @@ router.post("/requests", authMiddleware, async (req, res) => {
 
     } catch (error) {
       console.error("Error creating charging request:", error);
+
+      if (tokensDeducted) {
+        try {
+          await User.findByIdAndUpdate(
+            userId,
+            {
+              $inc: { tokenBalance: TOKEN_COST },
+              $push: {
+                tokenHistory: {
+                  amount: TOKEN_COST,
+                  type: "refund",
+                  description: "Refunded failed charging request",
+                  timestamp: new Date()
+                }
+              }
+            }
+          );
+          console.warn(`Refunded ${TOKEN_COST} tokens after request creation failed for user ${userId}`);
+        } catch (refundError) {
+          console.error("Failed to refund tokens after request creation error:", refundError);
+        }
+      }
 
       res.status(500).json({
         success: false,
@@ -288,11 +312,20 @@ router.get("/requests/city/:city", authMiddleware, async (req, res) => {
 
     console.log(`\n=== Fetching requests for city: "${city}", user city: "${userCity}" ===`);
 
+    const normalizedRequestedCity = city?.toString().trim().toLowerCase();
+    const normalizedUserCity = userCity?.toString().trim().toLowerCase();
+    if (!normalizedRequestedCity || !normalizedUserCity || normalizedRequestedCity !== normalizedUserCity) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only view requests from your own city."
+      });
+    }
+
     // CRITICAL FIX: Only get requests from the specified city
     // Use case-insensitive regex to handle city name variations
     const filter = {
       status: "OPEN",
-      city: buildCityExactMatchRegex(city)
+      city: buildCityExactMatchRegex(userCity)
     };
 
     // Calculate pagination
@@ -316,7 +349,7 @@ router.get("/requests/city/:city", authMiddleware, async (req, res) => {
       success: true,
       requests: requests.map(req => ({
         ...req,
-        isFromUserCity: req.city.toLowerCase() === userCity.toLowerCase()
+        isFromUserCity: true
       })),
       pagination: {
         currentPage: parseInt(page),
@@ -356,6 +389,13 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
       });
     }
 
+    if (!helper.city) {
+      return res.status(400).json({
+        success: false,
+        message: "Helper city is missing. Please update your profile."
+      });
+    }
+
     if (helper.isActiveHelper && helper.currentActiveRequest) {
       return res.status(400).json({
         success: false,
@@ -370,7 +410,8 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
         _id: requestId, 
         status: "OPEN",
         requesterId: { $ne: helperId }, // Prevent accepting own request
-        helperId: { $eq: null } // Ensure no helper is assigned yet
+        helperId: { $eq: null }, // Ensure no helper is assigned yet
+        city: buildCityExactMatchRegex(helper.city) // Ensure same-city acceptance
       },
       { 
         helperId: helperId,
@@ -395,6 +436,11 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
         return res.status(400).json({
           success: false,
           message: `This request is no longer available (status: ${existingRequest.status})`
+        });
+      } else if (existingRequest.city?.toLowerCase() !== helper.city?.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only accept requests from your own city"
         });
       } else if (existingRequest.requesterId.toString() === helperId) {
         return res.status(400).json({
@@ -886,6 +932,61 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
     }
 
     try {
+      if (!request.helperId) {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot complete request without an assigned helper."
+        });
+      }
+
+      const requesterId = request.requesterId._id;
+      const helperId = request.helperId._id;
+
+      const updatedHelper = await User.findByIdAndUpdate(
+        helperId,
+        {
+          $inc: { tokenBalance: TOKEN_COST },
+          $push: {
+            tokenHistory: {
+              amount: TOKEN_COST,
+              type: "reward",
+              description: `Completed charging request for ${request.requesterId.name}`,
+              timestamp: new Date()
+            }
+          }
+        },
+        {
+          new: true,
+          select: 'tokenBalance name email'
+        }
+      );
+
+      if (!updatedHelper) {
+        throw new Error("Failed to update helper tokens");
+      }
+
+      const updatedRequester = await User.findByIdAndUpdate(
+        requesterId,
+        {
+          $push: {
+            tokenHistory: {
+              amount: -TOKEN_COST,
+              type: "payment",
+              description: `Payment to ${request.helperId.name} for charging service`,
+              timestamp: new Date()
+            }
+          }
+        },
+        {
+          new: true,
+          select: 'tokenBalance name email'
+        }
+      );
+
+      if (!updatedRequester) {
+        throw new Error("Failed to update requester history");
+      }
+
       // Update request status to COMPLETED
       const updatedRequest = await ChargingRequest.findByIdAndUpdate(
         requestId,
@@ -907,15 +1008,13 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
       }
 
       // SAFETY CHECK: Reset helper status to allow new requests
-      if (request.helperId) {
-        await User.findByIdAndUpdate(
-          request.helperId._id,
-          {
-            isActiveHelper: false,
-            currentActiveRequest: null
-          }
-        );
-      }
+      await User.findByIdAndUpdate(
+        request.helperId._id,
+        {
+          isActiveHelper: false,
+          currentActiveRequest: null
+        }
+      );
 
       console.log(`Charging request ${requestId} marked as completed by requester`);
 
@@ -933,6 +1032,7 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
             status: updatedRequest.status,
             completedAt: updatedRequest.completedAt
           },
+          helperNewBalance: updatedHelper.tokenBalance,
           timestamp: new Date().toISOString()
         });
 
@@ -945,6 +1045,7 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
               status: updatedRequest.status,
               completedAt: updatedRequest.completedAt
             },
+            helperNewBalance: updatedHelper.tokenBalance,
             timestamp: new Date().toISOString()
           });
         }
@@ -971,6 +1072,10 @@ router.post("/requests/:requestId/complete-requester", authMiddleware, async (re
           city: updatedRequest.city,
           status: updatedRequest.status,
           completedAt: updatedRequest.completedAt
+        },
+        balances: {
+          requester: updatedRequester.tokenBalance,
+          helper: updatedHelper.tokenBalance
         }
       });
 
@@ -1042,6 +1147,35 @@ router.get("/requests/helper", authMiddleware, async (req, res) => {
       success: false,
       message: "Internal server error while fetching helper requests"
     });
+  }
+});
+
+/**
+ * GET /api/charging/requests/:requestId
+ * Get a single request (requester/helper only)
+ */
+router.get("/requests/:requestId", authMiddleware, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+
+    const request = await ChargingRequest.findById(requestId)
+      .populate('requesterId', 'name email city')
+      .populate('helperId', 'name email city')
+      .lean();
+
+    if (!request) {
+      return res.status(404).json({ success: false, message: "Charging request not found" });
+    }
+
+    if (!isParticipant(request, userId)) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    res.json({ success: true, request });
+  } catch (error) {
+    console.error("Error fetching request:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch request" });
   }
 });
 

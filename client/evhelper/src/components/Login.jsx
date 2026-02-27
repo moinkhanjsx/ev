@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useEffect, useRef, useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,6 +11,68 @@ const Login = () => {
   });
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [googleError, setGoogleError] = useState('');
+  const [googleCity, setGoogleCity] = useState('');
+  const [showCityPrompt, setShowCityPrompt] = useState(false);
+  const [pendingCredential, setPendingCredential] = useState(null);
+  const googleBtnRef = useRef(null);
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (import.meta.env.DEV) {
+      console.log('Google Client ID:', clientId);
+    }
+    if (!clientId) {
+      setGoogleError('Google login not configured');
+      return;
+    }
+
+    if (!window.google || !googleBtnRef.current) return;
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response) => {
+        if (!response.credential) return;
+        setGoogleError('');
+        try {
+          await actions.googleLogin({ credential: response.credential });
+          navigate('/dashboard');
+        } catch (err) {
+          if (err?.code === 'CITY_REQUIRED') {
+            setPendingCredential(response.credential);
+            setShowCityPrompt(true);
+          } else {
+            setGoogleError(err?.message || 'Google login failed');
+          }
+        }
+      },
+      use_fedcm_for_prompt: false
+    });
+
+    window.google.accounts.id.renderButton(googleBtnRef.current, {
+      theme: 'outline',
+      size: 'large',
+      type: 'standard',
+      text: 'continue_with'
+    });
+  }, [actions, navigate]);
+
+  const handleCitySubmit = async () => {
+    if (!pendingCredential) return;
+    if (!googleCity.trim()) {
+      setGoogleError('City is required');
+      return;
+    }
+
+    try {
+      await actions.googleLogin({ credential: pendingCredential, city: googleCity.trim() });
+      setShowCityPrompt(false);
+      setPendingCredential(null);
+      navigate('/dashboard');
+    } catch (err) {
+      setGoogleError(err?.message || 'Google login failed');
+    }
+  };
 
   const validateForm = () => {
     const newErrors = {};
@@ -195,6 +257,33 @@ const Login = () => {
                 'Sign In'
               )}
             </button>
+
+            {/* Google Login */}
+            <div className="text-center">
+              <div ref={googleBtnRef} className="inline-flex justify-center"></div>
+              {googleError && (
+                <p className="mt-3 text-sm text-red-400">{googleError}</p>
+              )}
+            </div>
+
+            {showCityPrompt && (
+              <div className="ev-formal-field">
+                <label htmlFor="googleCity" className="ev-formal-label block">
+                  City (required)
+                </label>
+                <input
+                  id="googleCity"
+                  type="text"
+                  value={googleCity}
+                  onChange={(e) => setGoogleCity(e.target.value)}
+                  className="ev-input ev-formal-input w-full"
+                  placeholder="Enter your city"
+                />
+                <button type="button" className="ev-formal-button w-full" onClick={handleCitySubmit}>
+                  Continue
+                </button>
+              </div>
+            )}
 
             {/* Register Link */}
             <div className="pt-4">

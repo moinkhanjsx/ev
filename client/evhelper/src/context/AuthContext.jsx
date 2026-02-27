@@ -130,6 +130,17 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  useEffect(() => {
+    const onStorage = (event) => {
+      if (event.key === 'evhelper_token' || event.key === 'evhelper_user') {
+        socketService.disconnect();
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   // Action creators
   const actions = {
     login: async (credentials) => {
@@ -145,6 +156,24 @@ export const AuthProvider = ({ children }) => {
         dispatch({
           type: AUTH_ACTIONS.LOGIN_FAILURE,
           payload: error.message || 'Login failed'
+        });
+        throw error;
+      }
+    },
+
+    googleLogin: async ({ credential, city }) => {
+      dispatch({ type: AUTH_ACTIONS.LOGIN_START });
+      try {
+        const result = await authAPI.googleLogin(credential, city);
+        dispatch({
+          type: AUTH_ACTIONS.LOGIN_SUCCESS,
+          payload: result
+        });
+        return result;
+      } catch (error) {
+        dispatch({
+          type: AUTH_ACTIONS.LOGIN_FAILURE,
+          payload: error.message || 'Google login failed'
         });
         throw error;
       }

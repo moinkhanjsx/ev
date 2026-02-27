@@ -8,6 +8,7 @@ import RequestMessage from './src/models/RequestMessage.js';
 import { sanitizeCityForRoom } from "./src/utils/city.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import mongoose from "mongoose";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,140 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*" }
 });
+
+const REQUEST_EXPIRE_HOURS = parseInt(process.env.REQUEST_EXPIRE_HOURS || "4", 10);
+const REQUEST_EXPIRY_CHECK_MS = 5 * 60 * 1000;
+const REQUEST_EXPIRY_LOCK_MS = 2 * 60 * 1000;
+const REQUEST_EXPIRY_LOCK_ID = "expire-requests";
+
+const ensureChatTTLIndex = async () => {
+  try {
+    await RequestMessage.collection.createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 }
+    );
+    console.log("Chat TTL index ensured on RequestMessage.expiresAt");
+  } catch (error) {
+    console.error("Failed to ensure chat TTL index:", error);
+  }
+};
+
+mongoose.connection.once("open", () => {
+  ensureChatTTLIndex();
+});
+
+const acquireExpiryLock = async () => {
+  try {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + REQUEST_EXPIRY_LOCK_MS);
+    const result = await mongoose.connection.collection("locks").findOneAndUpdate(
+      {
+        _id: REQUEST_EXPIRY_LOCK_ID,
+        $or: [
+          { expiresAt: { $exists: false } },
+          { expiresAt: { $lte: now } }
+        ]
+      },
+      {
+        $set: {
+          expiresAt,
+          owner: process.pid,
+          updatedAt: now
+        }
+      },
+      { upsert: true, returnDocument: "after" }
+    );
+
+    return result?.value?.owner === process.pid;
+  } catch (error) {
+    console.error("Failed to acquire expiry lock:", error);
+    return false;
+  }
+};
+
+const releaseExpiryLock = async () => {
+  await mongoose.connection.collection("locks").updateOne(
+    { _id: REQUEST_EXPIRY_LOCK_ID, owner: process.pid },
+    { $set: { expiresAt: new Date(0), updatedAt: new Date() } }
+  );
+};
+
+const expireOldRequests = async () => {
+  try {
+    if (!Number.isFinite(REQUEST_EXPIRE_HOURS) || REQUEST_EXPIRE_HOURS <= 0) {
+      return;
+    }
+
+    const cutoff = new Date(Date.now() - REQUEST_EXPIRE_HOURS * 60 * 60 * 1000);
+    // Atomically expire requests one-by-one to avoid double refunds in multi-instance deployments.
+    // Also guard against race with accept by requiring updatedAt <= cutoff and helperId null.
+    // This ensures only long-idle OPEN requests are expired.
+    while (true) {
+      const expiredAt = new Date();
+      const request = await ChargingRequest.findOneAndUpdate(
+        {
+          status: "OPEN",
+          createdAt: { $lte: cutoff },
+          updatedAt: { $lte: cutoff },
+          helperId: null
+        },
+        {
+          $set: {
+            status: "EXPIRED",
+            expiredAt
+          }
+        },
+        { new: true }
+      ).lean();
+
+      if (!request) {
+        break;
+      }
+
+      const requesterId = request.requesterId;
+      const refundAmount = request.tokenCost || 0;
+
+      if (requesterId) {
+        await User.findByIdAndUpdate(
+          requesterId,
+          {
+            $inc: { tokenBalance: refundAmount },
+            $push: {
+              tokenHistory: {
+                amount: refundAmount,
+                type: "refund",
+                description: "Refunded expired charging request",
+                timestamp: new Date()
+              }
+            }
+          }
+        );
+      }
+
+      const roomName = `city-${sanitizeCityForRoom(request.city)}`;
+      io.to(roomName).emit('request-expired-notification', {
+        requestId: request._id,
+        message: `A charging request expired in ${request.city}`,
+        status: "EXPIRED",
+        expiredAt: request.expiredAt,
+        timestamp: new Date().toISOString()
+      });
+
+      if (requesterId) {
+        io.to(requesterId.toString()).emit('request-expired', {
+          request: {
+            id: request._id,
+            status: "EXPIRED",
+            expiredAt: request.expiredAt
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error expiring requests:", error);
+  }
+};
 
 // Socket authentication middleware
 io.use((socket, next) => {
@@ -91,38 +226,56 @@ io.on("connection", (socket) => {
    */
   socket.on("join-city", (data) => {
     try {
-      const { city } = data;
-
-      // Validate city input
-      if (!city || typeof city !== 'string' || city.trim().length === 0) {
-        socket.emit("error", { message: "Invalid city provided" });
+      if (!socket.userId) {
+        socket.emit("error", { message: "User not authenticated" });
         return;
       }
 
-      const sanitizedCity = sanitizeCityForRoom(city);
+      const { city: requestedCity } = data || {};
+
+      const ensureUserCity = async () => {
+        if (socket.userCity) return socket.userCity;
+        const user = await User.findById(socket.userId).lean();
+        return user?.city;
+      };
+
+      const userCity = await ensureUserCity();
+
+      // Validate city from user profile
+      if (!userCity || typeof userCity !== 'string' || userCity.trim().length === 0) {
+        socket.emit("error", { message: "User city not available" });
+        return;
+      }
+
+      if (requestedCity && requestedCity.toString().trim().toLowerCase() !== userCity.toString().trim().toLowerCase()) {
+        socket.emit("error", { message: "You can only join your own city room" });
+        return;
+      }
+
+      const sanitizedCity = sanitizeCityForRoom(userCity);
       const roomName = `city-${sanitizedCity}`;
-      console.log(`City sanitization - Original: "${city}" -> Sanitized: "${sanitizedCity}" -> Room: "${roomName}"`);
+      console.log(`City sanitization - User city: "${userCity}" -> Sanitized: "${sanitizedCity}" -> Room: "${roomName}"`);
 
       // Join city-specific room
       socket.join(roomName);
       
       // Store city info in socket object for reference
-      socket.userCity = city;
+      socket.userCity = userCity;
       socket.roomName = roomName;
 
       console.log(`User ${socket.id} joined city room: ${roomName}`);
 
       // Confirm successful room join to client
       socket.emit("city-joined", { 
-        city: city, 
+        city: userCity, 
         roomName: roomName,
-        message: `Successfully joined ${city} room`
+        message: `Successfully joined ${userCity} room`
       });
 
       // Notify other users in same city
       socket.to(roomName).emit("user-joined-city", {
         userId: socket.id,
-        city: city,
+        city: userCity,
         timestamp: new Date().toISOString()
       });
 
@@ -167,7 +320,7 @@ io.on("connection", (socket) => {
       // Broadcast charging request to all users in same city (including sender for confirmation)
       io.to(socket.roomName).emit("charging-request", {
         ...requestData,
-        requesterId: socket.id,
+        requesterId: socket.userId || socket.id,
         city: socket.userCity,
         timestamp: new Date().toISOString()
       });
@@ -519,4 +672,13 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  setInterval(async () => {
+    try {
+      const hasLock = await acquireExpiryLock();
+      if (!hasLock) return;
+      await expireOldRequests();
+    } finally {
+      await releaseExpiryLock();
+    }
+  }, REQUEST_EXPIRY_CHECK_MS);
 });

@@ -192,6 +192,12 @@ body {
   border: 1px solid var(--ev-accent-red);
 }
 
+.ev-status-expired {
+  background: rgba(120, 120, 120, 0.2);
+  color: var(--ev-text-secondary);
+  border: 1px solid var(--ev-text-secondary);
+}
+
 /* Charging Pulse Animation */
 .ev-charging-pulse {
   position: relative;
@@ -947,6 +953,31 @@ body {
   margin-top: 12px;
   color: #fca5a5;
   font-size: 13px;
+}
+
+.ev-toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ev-toast {
+  background: rgba(18, 18, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+}
+
+.ev-toast-expired {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .ev-drawer {

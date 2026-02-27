@@ -6,6 +6,7 @@ const AcceptedRequestsList = ({ requests, onCompleteRequest, onOpenChat }) => {
   const getStatusClass = (status) => {
     switch (status) {
       case 'ACCEPTED': return 'ev-status-accepted';
+      case 'EXPIRED': return 'ev-status-expired';
       default: return 'ev-status-completed';
     }
   };

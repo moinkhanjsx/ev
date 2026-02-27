@@ -103,6 +103,25 @@ export const authAPI = {
     }
   },
 
+  // Google login
+  googleLogin: async (credential, city = "") => {
+    try {
+      const response = await api.post('/auth/google', { credential, city });
+
+      if (response.data.success) {
+        const { token, user } = response.data;
+        localStorage.setItem('evhelper_token', token);
+        localStorage.setItem('evhelper_user', JSON.stringify(user));
+        return { success: true, user, token };
+      }
+
+      throw new Error(response.data.message || 'Google login failed');
+    } catch (error) {
+      console.error('Google login error:', error);
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Logout user
   logout: () => {
     localStorage.removeItem('evhelper_token');
@@ -150,3 +169,4 @@ export const authAPI = {
 };
 
 export default api;
+export { api };

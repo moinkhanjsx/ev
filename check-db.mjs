@@ -1,17 +1,23 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import User from './server/src/models/User.js';
 
 dotenv.config({ path: './server/.env' });
 
 async function checkUsers() {
+  let connected = false;
   try {
-    await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+    const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/ev_charging';
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
+    connected = true;
     console.log('✅ Connected to MongoDB\n');
 
-    const users = await User.find({}, 'name email city tokenBalance createdAt').lean();
+    const db = mongoose.connection.db;
+    const users = await db.collection('users')
+      .find({}, { projection: { name: 1, email: 1, city: 1, tokenBalance: 1, createdAt: 1 } })
+      .toArray();
+
     console.log(`📊 Total Users: ${users.length}\n`);
-    
+
     if (users.length > 0) {
       console.log('📋 Users in Database:\n');
       users.forEach((user, idx) => {
@@ -24,12 +30,13 @@ async function checkUsers() {
     } else {
       console.log('ℹ️  No users found in database yet.\n');
     }
-
-    await mongoose.disconnect();
-    process.exit(0);
   } catch (err) {
     console.error('❌ Error:', err.message);
-    process.exit(1);
+    process.exitCode = 1;
+  } finally {
+    if (connected) {
+      await mongoose.disconnect();
+    }
   }
 }
 

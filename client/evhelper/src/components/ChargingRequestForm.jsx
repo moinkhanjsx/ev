@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import api, { authAPI } from '../utils/auth.js';
+import { api, authAPI } from '../utils/auth.js';
 
 const ChargingRequestForm = () => {
+  const navigate = useNavigate();
   const { state } = useAuth();
   const [formData, setFormData] = useState({
     location: '',
@@ -72,7 +74,7 @@ const ChargingRequestForm = () => {
         });
         
         alert('Charging request created successfully!');
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
       } else {
         setErrors({ general: response.data.message || 'Failed to create charging request' });
       }
