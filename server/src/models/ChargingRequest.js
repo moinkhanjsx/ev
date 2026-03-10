@@ -72,6 +72,47 @@ const chargingRequestSchema = new mongoose.Schema(
       min: 1,
     },
 
+    settlement: {
+      sharedUnits: {
+        type: Number,
+        default: null,
+        min: 0,
+      },
+      tokenAmount: {
+        type: Number,
+        default: null,
+        min: 0,
+      },
+      helperNote: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      proposedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      proposedAt: {
+        type: Date,
+        default: null,
+      },
+      confirmedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      confirmedAt: {
+        type: Date,
+        default: null,
+      },
+      status: {
+        type: String,
+        enum: ["NONE", "PROPOSED", "CONFIRMED"],
+        default: "NONE",
+      },
+    },
+
     acceptedAt: {
       type: Date,
       default: null,

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/auth.js';
 import socketService from '../utils/socket.js';
 import AcceptedRequestsList from '../components/AcceptedRequestsList';
+import BlynkDevicePanel from '../components/BlynkDevicePanel.jsx';
 import RequestChatDrawer from '../components/RequestChatDrawer';
 
 const DashboardPage = () => {
@@ -14,6 +15,47 @@ const DashboardPage = () => {
   const [error, setError] = React.useState(null);
   const [chatDrawer, setChatDrawer] = React.useState({ open: false, requestId: null, peerName: null, requestStatus: null });
   const [toast, setToast] = React.useState(null);
+  const [submittingSettlementId, setSubmittingSettlementId] = React.useState(null);
+  const [confirmingSettlementId, setConfirmingSettlementId] = React.useState(null);
+
+  const currentUserId = (state.user?._id || state.user?.id || '').toString();
+
+  const formatTokenValue = (value) => {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+      return '0';
+    }
+
+    const numericValue = Number(value);
+    return Number.isInteger(numericValue) ? `${numericValue}` : numericValue.toFixed(2);
+  };
+
+  const getSettlementBreakdown = (request) => {
+    const tokenAmount = request?.settlement?.tokenAmount;
+
+    if (tokenAmount === null || tokenAmount === undefined) {
+      return null;
+    }
+
+    const depositAmount = Number(request?.tokenCost || 0);
+    const normalizedTokenAmount = Number(tokenAmount);
+    const difference = Number((normalizedTokenAmount - depositAmount).toFixed(2));
+
+    return {
+      sharedUnits: Number(request?.settlement?.sharedUnits || 0),
+      tokenAmount: normalizedTokenAmount,
+      depositAmount,
+      additionalCharge: difference > 0 ? difference : 0,
+      refundAmount: difference < 0 ? Math.abs(difference) : 0,
+    };
+  };
+
+  const syncTokenBalance = (nextBalance) => {
+    if (nextBalance === null || nextBalance === undefined) {
+      return;
+    }
+
+    actions.updateUser({ tokenBalance: nextBalance });
+  };
 
   useEffect(() => {
     // Connect to socket and join user's city room
@@ -81,12 +123,38 @@ const DashboardPage = () => {
         setToast('Your request expired');
       };
 
+      const onSettlementProposed = () => {
+        fetchRequests();
+        fetchAcceptedRequests();
+        setToast('Shared amount updated');
+      };
+
+      const onRequestCompleted = (data) => {
+        fetchRequests();
+        fetchAcceptedRequests();
+
+        const requesterId = (data?.request?.requesterId || '').toString();
+        const helperId = (data?.request?.helperId || '').toString();
+
+        if (requesterId === currentUserId) {
+          syncTokenBalance(data?.balances?.requester);
+        }
+
+        if (helperId === currentUserId) {
+          syncTokenBalance(data?.balances?.helper);
+        }
+
+        setToast('Charging settlement completed');
+      };
+
       socketService.on('charging-request', onChargingRequest);
       socketService.on('request-taken', onRequestTaken);
       socketService.on('request-completed-notification', onRequestCompletedNotification);
+      socketService.on('request-completed', onRequestCompleted);
       socketService.on('request-canceled-notification', onRequestCanceledNotification);
       socketService.on('request-expired-notification', onRequestExpiredNotification);
       socketService.on('request-expired', onRequestExpired);
+      socketService.on('request-settlement-proposed', onSettlementProposed);
 
       // Initial load
       fetchRequests();
@@ -96,12 +164,14 @@ const DashboardPage = () => {
         socketService.off('charging-request', onChargingRequest);
         socketService.off('request-taken', onRequestTaken);
         socketService.off('request-completed-notification', onRequestCompletedNotification);
+        socketService.off('request-completed', onRequestCompleted);
         socketService.off('request-canceled-notification', onRequestCanceledNotification);
         socketService.off('request-expired-notification', onRequestExpiredNotification);
         socketService.off('request-expired', onRequestExpired);
+        socketService.off('request-settlement-proposed', onSettlementProposed);
       };
     }
-  }, [state.isAuthenticated, state.user?.city]);
+  }, [state.isAuthenticated, state.user?.city, currentUserId]);
 
   React.useEffect(() => {
     if (!toast) return;
@@ -222,6 +292,7 @@ const DashboardPage = () => {
       const response = await api.post(`/charging/requests/${requestId}/cancel`);
       
       if (response.data.success) {
+        syncTokenBalance(response.data.newBalance);
         alert('Request canceled successfully!');
         fetchRequests(); // Refresh the requests list
       } else {
@@ -232,19 +303,42 @@ const DashboardPage = () => {
     }
   };
 
-  const handleCompleteRequest = async (requestId) => {
+  const handleSubmitSettlement = async (requestId, payload) => {
     try {
-      const response = await api.post(`/charging/requests/${requestId}/complete-requester`);
-      
+      setSubmittingSettlementId(requestId);
+      const response = await api.post(`/charging/requests/${requestId}/settlement`, payload);
+
       if (response.data.success) {
-        alert('Request marked as completed successfully!');
-        fetchRequests(); // Refresh the requests list
-        fetchAcceptedRequests(); // Refresh helper's accepted requests
+        alert('Shared charging amount submitted successfully!');
+        fetchRequests();
+        fetchAcceptedRequests();
       } else {
-        alert(response.data.message || 'Failed to mark request as completed');
+        alert(response.data.message || 'Failed to submit shared charging amount');
       }
     } catch (error) {
-      alert(error.response?.data?.message || error.message || 'Failed to mark request as completed');
+      alert(error.response?.data?.message || error.message || 'Failed to submit shared charging amount');
+    } finally {
+      setSubmittingSettlementId(null);
+    }
+  };
+
+  const handleConfirmSettlement = async (requestId) => {
+    try {
+      setConfirmingSettlementId(requestId);
+      const response = await api.post(`/charging/requests/${requestId}/settlement/confirm`);
+      
+      if (response.data.success) {
+        syncTokenBalance(response.data?.balances?.requester);
+        alert('Settlement confirmed and tokens transferred successfully!');
+        fetchRequests();
+        fetchAcceptedRequests();
+      } else {
+        alert(response.data.message || 'Failed to confirm settlement');
+      }
+    } catch (error) {
+      alert(error.response?.data?.message || error.message || 'Failed to confirm settlement');
+    } finally {
+      setConfirmingSettlementId(null);
     }
   };
 
@@ -312,6 +406,8 @@ const DashboardPage = () => {
             </div>
           </div>
         </div>
+
+        <BlynkDevicePanel />
 
         {/* Active Chats */}
         {(() => {
@@ -448,7 +544,7 @@ const DashboardPage = () => {
                 <p className="ev-formal-subtitle">{state.user?.email}</p>
                 <p className="ev-formal-subtitle">{state.user?.city}</p>
                 <div className="mt-3">
-                  <span className="ev-formal-pill">Token Balance: {state.user?.tokenBalance || 0}</span>
+                  <span className="ev-formal-pill">Token Balance: {formatTokenValue(state.user?.tokenBalance)}</span>
                 </div>
               </div>
             </div>
@@ -488,7 +584,11 @@ const DashboardPage = () => {
                     <p className="text-sm mt-2">Create your first request to get emergency charging assistance!</p>
                   </div>
                 ) : (
-                  requests.map((request) => (
+                  requests.map((request) => {
+                    const settlement = getSettlementBreakdown(request);
+                    const settlementPending = request.settlement?.status === 'PROPOSED';
+
+                    return (
                     <React.Fragment key={request._id}>
                       <div className="ev-formal-card ev-formal-compact p-4 sm:p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -542,11 +642,43 @@ const DashboardPage = () => {
                               <p className="ev-formal-subtitle">{request.estimatedTime} minutes</p>
                             </div>
                           )}
+
+                          {settlement && (
+                            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                              <h4 className="text-sm font-medium text-gray-200 mb-3">Charging Settlement</h4>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-gray-300">
+                                <div>
+                                  <div className="text-gray-500">Shared Units</div>
+                                  <div>{formatTokenValue(settlement.sharedUnits)}</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Token Transfer</div>
+                                  <div>{formatTokenValue(settlement.tokenAmount)} tokens</div>
+                                </div>
+                                <div>
+                                  <div className="text-gray-500">Deposit Already Paid</div>
+                                  <div>{formatTokenValue(settlement.depositAmount)} tokens</div>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 text-sm text-gray-300">
+                                {settlement.additionalCharge > 0 && (
+                                  <span>Approving this will deduct {formatTokenValue(settlement.additionalCharge)} more tokens from your account.</span>
+                                )}
+                                {settlement.refundAmount > 0 && (
+                                  <span>Approving this will refund {formatTokenValue(settlement.refundAmount)} tokens back to your account.</span>
+                                )}
+                                {settlement.additionalCharge === 0 && settlement.refundAmount === 0 && (
+                                  <span>Your existing deposit exactly matches this transfer.</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-700">
                           <div className="ev-formal-subtitle">
-                            {request.tokenCost} tokens • Status: {request.status}
+                            Deposit: {formatTokenValue(request.tokenCost)} tokens • Status: {request.status}
                           </div>
                            
                           {/* Action buttons based on status */}
@@ -563,12 +695,6 @@ const DashboardPage = () => {
 
                           {request.status === 'ACCEPTED' && (
                             <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 sm:items-center">
-                              <button 
-                                onClick={() => handleCompleteRequest(request._id)}
-                                className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
-                              >
-                                Mark as Completed
-                              </button>
                               <button
                                 onClick={() =>
                                   setChatDrawer({
@@ -582,8 +708,19 @@ const DashboardPage = () => {
                               >
                                 Open Chat
                               </button>
+                              {settlementPending ? (
+                                <button 
+                                  onClick={() => handleConfirmSettlement(request._id)}
+                                  disabled={confirmingSettlementId === request._id}
+                                  className="ev-formal-button w-full sm:w-auto text-sm sm:text-base"
+                                >
+                                  {confirmingSettlementId === request._id ? 'Confirming...' : 'Agree & Transfer Tokens'}
+                                </button>
+                              ) : null}
                               <span className="text-xs sm:text-sm text-gray-400 sm:ml-2">
-                                Waiting for completion...
+                                {settlementPending
+                                  ? 'Review the helper amount and confirm when ready.'
+                                  : 'Waiting for the helper to submit the shared amount.'}
                               </span>
                             </div>
                           )}
@@ -596,7 +733,7 @@ const DashboardPage = () => {
                         </div>
                       </div>
                     </React.Fragment>
-                  ))
+                  )})
                 )}
               </div>
             )}
@@ -617,6 +754,8 @@ const DashboardPage = () => {
               ) : (
                 <AcceptedRequestsList 
                   requests={acceptedRequests}
+                  onSubmitSettlement={handleSubmitSettlement}
+                  submittingSettlementId={submittingSettlementId}
                   onOpenChat={(request) =>
                     setChatDrawer({
                       open: true,

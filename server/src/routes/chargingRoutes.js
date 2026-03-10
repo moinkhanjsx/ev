@@ -10,10 +10,23 @@ const router = express.Router();
 // Fixed token cost for creating a charging request
 const TOKEN_COST = 5;
 const MAX_MESSAGE_LENGTH = 500;
+const MAX_SETTLEMENT_NOTE_LENGTH = 240;
+const TOKENS_PER_SHARED_UNIT = 1;
+
+const createHttpError = (status, message) => {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+};
 
 const sanitizeMessage = (value) => {
   if (typeof value !== "string") return "";
   return value.replace(/\s+/g, " ").trim().slice(0, MAX_MESSAGE_LENGTH);
+};
+
+const sanitizeSettlementNote = (value) => {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_SETTLEMENT_NOTE_LENGTH);
 };
 
 const maskPhone = (phone) => {
@@ -41,6 +54,280 @@ const isParticipant = (request, userId) => {
   const requesterMatch = request.requesterId?.toString() === userId.toString();
   const helperMatch = request.helperId?.toString() === userId.toString();
   return requesterMatch || helperMatch;
+};
+
+const normalizeSharedUnits = (value) => {
+  const parsedValue =
+    typeof value === "number" ? value : Number.parseFloat(typeof value === "string" ? value.trim() : value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return null;
+  }
+
+  return Number(parsedValue.toFixed(2));
+};
+
+const calculateSettlementTokens = (sharedUnits) =>
+  Number((sharedUnits * TOKENS_PER_SHARED_UNIT).toFixed(2));
+
+const calculateSettlementBalanceAdjustment = (request) => {
+  const requestDeposit = Number(request?.tokenCost || 0);
+  const tokenAmount = Number(request?.settlement?.tokenAmount || 0);
+  return Number((requestDeposit - tokenAmount).toFixed(2));
+};
+
+const toParticipantId = (value) =>
+  typeof value === "object" && value !== null ? value._id?.toString() || value.toString() : value?.toString();
+
+const buildSettlementResponse = (request) => ({
+  status: request?.settlement?.status || "NONE",
+  sharedUnits: request?.settlement?.sharedUnits ?? null,
+  tokenAmount: request?.settlement?.tokenAmount ?? null,
+  helperNote: request?.settlement?.helperNote || "",
+  proposedBy: toParticipantId(request?.settlement?.proposedBy),
+  proposedAt: request?.settlement?.proposedAt || null,
+  confirmedBy: toParticipantId(request?.settlement?.confirmedBy),
+  confirmedAt: request?.settlement?.confirmedAt || null,
+  depositApplied: Number(request?.tokenCost || 0),
+  balanceAdjustment: request?.settlement?.tokenAmount == null ? null : calculateSettlementBalanceAdjustment(request),
+  tokensPerUnit: TOKENS_PER_SHARED_UNIT,
+});
+
+const buildRequestUpdatePayload = (request) => ({
+  id: request?._id,
+  _id: request?._id,
+  requesterId: toParticipantId(request?.requesterId),
+  helperId: toParticipantId(request?.helperId),
+  status: request?.status,
+  tokenCost: Number(request?.tokenCost || 0),
+  acceptedAt: request?.acceptedAt || null,
+  completedAt: request?.completedAt || null,
+  settlement: buildSettlementResponse(request),
+});
+
+const emitRequestRoomMessage = (io, requestId, message) => {
+  if (!io || !message) return;
+  io.to(`request-${requestId}`).emit("chat-message", { requestId, message });
+};
+
+const finalizeSettlementAndComplete = async ({ request, actorId }) => {
+  const requesterId = toParticipantId(request?.requesterId);
+  const helperId = toParticipantId(request?.helperId);
+
+  if (!requesterId || requesterId !== actorId.toString()) {
+    throw createHttpError(403, "Only the requester can confirm the shared charging amount");
+  }
+
+  if (!helperId) {
+    throw createHttpError(400, "This request does not have an assigned helper");
+  }
+
+  if (request.status !== "ACCEPTED") {
+    throw createHttpError(400, `Cannot complete request with status: ${request.status}`);
+  }
+
+  if (request.settlement?.status !== "PROPOSED" || !request.settlement?.tokenAmount) {
+    throw createHttpError(400, "The helper must submit the shared charging amount before confirmation");
+  }
+
+  const tokenAmount = Number(request.settlement.tokenAmount);
+  const sharedUnits = Number(request.settlement.sharedUnits || 0);
+  const balanceAdjustment = calculateSettlementBalanceAdjustment(request);
+  const additionalCharge = balanceAdjustment < 0 ? Math.abs(balanceAdjustment) : 0;
+
+  if (additionalCharge > 0 && Number(request.requesterId?.tokenBalance || 0) < additionalCharge) {
+    throw createHttpError(
+      400,
+      `Insufficient tokens. You need ${additionalCharge} more tokens to confirm this settlement.`
+    );
+  }
+
+  const requesterUpdate = {};
+  const requesterHistoryEntry =
+    balanceAdjustment < 0
+      ? {
+          amount: balanceAdjustment,
+          type: "payment",
+          description: `Additional settlement payment for ${sharedUnits} shared charging units`,
+          timestamp: new Date(),
+        }
+      : balanceAdjustment > 0
+        ? {
+            amount: balanceAdjustment,
+            type: "refund",
+            description: `Settlement adjustment refund for ${sharedUnits} shared charging units`,
+            timestamp: new Date(),
+          }
+        : null;
+
+  if (balanceAdjustment !== 0) {
+    requesterUpdate.$inc = { tokenBalance: balanceAdjustment };
+  }
+
+  if (requesterHistoryEntry) {
+    requesterUpdate.$push = { tokenHistory: requesterHistoryEntry };
+  }
+
+  const updatedRequester =
+    Object.keys(requesterUpdate).length > 0
+      ? await User.findByIdAndUpdate(requesterId, requesterUpdate, {
+          new: true,
+          select: "tokenBalance name email",
+        })
+      : await User.findById(requesterId).select("tokenBalance name email");
+
+  if (!updatedRequester) {
+    throw createHttpError(500, "Failed to update requester balance");
+  }
+
+  const updatedHelper = await User.findByIdAndUpdate(
+    helperId,
+    {
+      $inc: { tokenBalance: tokenAmount },
+      $push: {
+        tokenHistory: {
+          amount: tokenAmount,
+          type: "reward",
+          description: `Received settlement for ${sharedUnits} shared charging units`,
+          timestamp: new Date(),
+        },
+      },
+    },
+    {
+      new: true,
+      select: "tokenBalance name email",
+    }
+  );
+
+  if (!updatedHelper) {
+    throw createHttpError(500, "Failed to update helper balance");
+  }
+
+  const completedAt = new Date();
+
+  const updatedRequest = await ChargingRequest.findByIdAndUpdate(
+    request._id,
+    {
+      status: "COMPLETED",
+      completedAt,
+      "settlement.status": "CONFIRMED",
+      "settlement.confirmedBy": requesterId,
+      "settlement.confirmedAt": completedAt,
+    },
+    {
+      new: true,
+    }
+  )
+    .populate("requesterId", "name email city")
+    .populate("helperId", "name email city");
+
+  if (!updatedRequest) {
+    throw createHttpError(500, "Failed to update request status");
+  }
+
+  await User.findByIdAndUpdate(helperId, {
+    isActiveHelper: false,
+    currentActiveRequest: null,
+  });
+
+  return {
+    updatedRequest,
+    updatedRequester,
+    updatedHelper,
+    tokenAmount,
+    sharedUnits,
+  };
+};
+
+const handleSettlementConfirmationRequest = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+
+    const request = await ChargingRequest.findById(requestId).populate(
+      "requesterId helperId",
+      "name email city tokenBalance"
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Charging request not found",
+      });
+    }
+
+    const { updatedRequest, updatedRequester, updatedHelper, tokenAmount, sharedUnits } =
+      await finalizeSettlementAndComplete({
+        request,
+        actorId: userId,
+      });
+
+    const settlementMessage = await RequestMessage.create({
+      requestId,
+      senderId: req.user._id,
+      senderName: req.user.name || "User",
+      senderRole: "requester",
+      type: "system",
+      text: `Confirmed ${sharedUnits} shared charging units for ${tokenAmount} tokens.`,
+      metadata: {
+        settlement: buildSettlementResponse(updatedRequest),
+      },
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      const requestPayload = buildRequestUpdatePayload(updatedRequest);
+      const roomName = `city-${sanitizeCityForRoom(updatedRequest.city)}`;
+
+      io.to(updatedRequest.requesterId._id.toString()).emit("request-completed", {
+        request: requestPayload,
+        balances: {
+          requester: updatedRequester.tokenBalance,
+          helper: updatedHelper.tokenBalance,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      io.to(updatedRequest.helperId._id.toString()).emit("request-completed", {
+        request: requestPayload,
+        balances: {
+          requester: updatedRequester.tokenBalance,
+          helper: updatedHelper.tokenBalance,
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      io.to(roomName).emit("request-completed-notification", {
+        requestId: updatedRequest._id,
+        message: `A charging request has been completed in ${updatedRequest.city}`,
+        requesterName: updatedRequest.requesterId.name,
+        helperName: updatedRequest.helperId.name,
+        status: "COMPLETED",
+        completedAt: updatedRequest.completedAt,
+        settlement: buildSettlementResponse(updatedRequest),
+        timestamp: new Date().toISOString(),
+      });
+
+      emitRequestRoomMessage(io, requestId, settlementMessage);
+    }
+
+    return res.json({
+      success: true,
+      message: "Charging request completed successfully",
+      request: buildRequestUpdatePayload(updatedRequest),
+      balances: {
+        requester: updatedRequester.tokenBalance,
+        helper: updatedHelper.tokenBalance,
+      },
+    });
+  } catch (error) {
+    console.error("Error confirming charging settlement:", error);
+
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Failed to confirm charging settlement. Please try again.",
+    });
+  }
 };
 
 /**
@@ -525,206 +812,125 @@ router.post("/requests/:requestId/accept", authMiddleware, async (req, res) => {
 });
 
 /**
- * POST /api/charging/requests/:requestId/complete
- * Complete a charging request
- * Transfer tokens from requester to helper
- * Only requester or helper can complete
+ * POST /api/charging/requests/:requestId/settlement
+ * Helper proposes the shared charging amount for an accepted request
  */
-router.post("/requests/:requestId/complete", authMiddleware, async (req, res) => {
+router.post("/requests/:requestId/settlement", authMiddleware, async (req, res) => {
   try {
     const { requestId } = req.params;
     const userId = req.user._id.toString();
+    const sharedUnits = normalizeSharedUnits(req.body?.sharedUnits);
+    const helperNote = sanitizeSettlementNote(req.body?.helperNote);
 
-    // Find the request with populated user data
-    const request = await ChargingRequest.findById(requestId)
-      .populate('requesterId helperId', 'name email city tokenBalance');
+    if (!sharedUnits) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid shared charging amount greater than 0.",
+      });
+    }
+
+    const request = await ChargingRequest.findById(requestId).populate(
+      "requesterId helperId",
+      "name email city tokenBalance"
+    );
 
     if (!request) {
       return res.status(404).json({
         success: false,
-        message: "Charging request not found"
+        message: "Charging request not found",
       });
     }
 
-    // Authorization check: Only requester or helper can complete
-    if (request.requesterId._id.toString() !== userId && 
-        (!request.helperId || request.helperId._id.toString() !== userId)) {
+    if (!request.helperId || request.helperId._id.toString() !== userId) {
       return res.status(403).json({
         success: false,
-        message: "Only the requester or assigned helper can complete this request"
+        message: "Only the assigned helper can submit the shared charging amount",
       });
     }
 
-    // Status check: Only ACCEPTED requests can be completed
     if (request.status !== "ACCEPTED") {
       return res.status(400).json({
         success: false,
-        message: `Cannot complete request with status: ${request.status}`
+        message: `Cannot submit a settlement for a request with status: ${request.status}`,
       });
     }
 
-    try {
-      const requesterId = request.requesterId._id;
-      const helperId = request.helperId._id;
+    const tokenAmount = calculateSettlementTokens(sharedUnits);
+    const proposedAt = new Date();
 
-      // Add tokens to helper (reward for completing the request)
-      const updatedHelper = await User.findByIdAndUpdate(
-        helperId,
-        {
-          $inc: { tokenBalance: TOKEN_COST },
-          $push: {
-            tokenHistory: {
-              amount: TOKEN_COST,
-              type: "reward",
-              description: `Completed charging request for ${request.requesterId.name}`,
-              timestamp: new Date()
-            }
-          }
-        },
-        {
-          new: true,
-          select: 'tokenBalance name email'
-        }
-      );
-
-      if (!updatedHelper) {
-        throw new Error("Failed to update helper tokens");
+    const updatedRequest = await ChargingRequest.findByIdAndUpdate(
+      requestId,
+      {
+        "settlement.status": "PROPOSED",
+        "settlement.sharedUnits": sharedUnits,
+        "settlement.tokenAmount": tokenAmount,
+        "settlement.helperNote": helperNote,
+        "settlement.proposedBy": req.user._id,
+        "settlement.proposedAt": proposedAt,
+        "settlement.confirmedBy": null,
+        "settlement.confirmedAt": null,
+      },
+      {
+        new: true,
       }
+    )
+      .populate("requesterId", "name email city")
+      .populate("helperId", "name email city");
 
-      // Record payment in requester's history (tokens were already deducted at creation)
-      const updatedRequester = await User.findByIdAndUpdate(
-        requesterId,
-        {
-          $push: {
-            tokenHistory: {
-              amount: -TOKEN_COST,
-              type: "payment",
-              description: `Payment to ${request.helperId.name} for charging service`,
-              timestamp: new Date()
-            }
-          }
-        },
-        {
-          new: true,
-          select: 'tokenBalance name email'
-        }
-      );
+    const settlementMessage = await RequestMessage.create({
+      requestId,
+      senderId: req.user._id,
+      senderName: req.user.name || "User",
+      senderRole: "helper",
+      type: "system",
+      text: `Proposed ${sharedUnits} shared charging units for ${tokenAmount} tokens.`,
+      metadata: {
+        settlement: buildSettlementResponse(updatedRequest),
+      },
+    });
 
-      if (!updatedRequester) {
-        throw new Error("Failed to update requester history");
-      }
+    const io = req.app.get("io");
+    if (io) {
+      const requestPayload = buildRequestUpdatePayload(updatedRequest);
 
-      // Update request status to COMPLETED
-      const updatedRequest = await ChargingRequest.findByIdAndUpdate(
-        requestId,
-        {
-          status: "COMPLETED",
-          completedAt: new Date()
-        },
-        {
-          new: true,
-          populate: [
-            { path: 'requesterId', select: 'name email city' },
-            { path: 'helperId', select: 'name email city' }
-          ]
-        }
-      );
-
-      if (!updatedRequest) {
-        throw new Error("Failed to update request status");
-      }
-
-      // SAFETY CHECK: Reset helper status to allow new requests
-      await User.findByIdAndUpdate(
-        helperId,
-        {
-          isActiveHelper: false,
-          currentActiveRequest: null
-        }
-      );
-
-      console.log(`Charging request ${requestId} completed. Tokens transferred from ${requesterId} to ${helperId}`);
-
-      // Emit real-time notifications
-      const io = req.app.get('io');
-      if (io) {
-        const roomName = `city-${sanitizeCityForRoom(request.city)}`;
-
-        // 1. Notify both parties of completion
-        io.to(requesterId.toString()).emit('request-completed', {
-          request: {
-            id: updatedRequest._id,
-            helperId: updatedRequest.helperId._id,
-            helperName: updatedRequest.helperId.name,
-            status: updatedRequest.status,
-            completedAt: updatedRequest.completedAt,
-            tokenAmount: TOKEN_COST
-          },
-          requesterNewBalance: updatedRequester.tokenBalance,
-          timestamp: new Date().toISOString()
-        });
-
-        io.to(helperId.toString()).emit('request-completed', {
-          request: {
-            id: updatedRequest._id,
-            requesterId: updatedRequest.requesterId._id,
-            requesterName: updatedRequest.requesterId.name,
-            status: updatedRequest.status,
-            completedAt: updatedRequest.completedAt,
-            tokenAmount: TOKEN_COST
-          },
-          helperNewBalance: updatedHelper.tokenBalance,
-          timestamp: new Date().toISOString()
-        });
-
-        // 2. Notify city that request was completed
-        io.to(roomName).emit('request-completed-notification', {
-          requestId: updatedRequest._id,
-          message: `A charging request has been completed in ${request.city}`,
-          requesterName: updatedRequest.requesterId.name,
-          helperName: updatedRequest.helperId.name,
-          status: "COMPLETED",
-          completedAt: updatedRequest.completedAt,
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "Charging request completed successfully",
-        request: {
-          id: updatedRequest._id,
-          requesterId: updatedRequest.requesterId._id,
-          helperId: updatedRequest.helperId._id,
-          city: updatedRequest.city,
-          status: updatedRequest.status,
-          completedAt: updatedRequest.completedAt,
-          tokenAmount: TOKEN_COST
-        },
-        balances: {
-          requester: updatedRequester.tokenBalance,
-          helper: updatedHelper.tokenBalance
-        }
+      io.to(updatedRequest.requesterId._id.toString()).emit("request-settlement-proposed", {
+        request: requestPayload,
+        timestamp: new Date().toISOString(),
       });
 
-    } catch (error) {
-      console.error("Error completing charging request:", error);
-
-      res.status(500).json({
-        success: false,
-        message: "Failed to complete charging request. Please try again."
+      io.to(updatedRequest.helperId._id.toString()).emit("request-settlement-proposed", {
+        request: requestPayload,
+        timestamp: new Date().toISOString(),
       });
+
+      emitRequestRoomMessage(io, requestId, settlementMessage);
     }
 
+    return res.json({
+      success: true,
+      message: "Shared charging amount submitted successfully",
+      request: buildRequestUpdatePayload(updatedRequest),
+    });
   } catch (error) {
-    console.error("Error completing charging request:", error);
-    
-    res.status(500).json({
+    console.error("Error submitting charging settlement:", error);
+    return res.status(500).json({
       success: false,
-      message: "Internal server error while completing charging request"
+      message: "Failed to submit the shared charging amount. Please try again.",
     });
   }
 });
+
+/**
+ * POST /api/charging/requests/:requestId/settlement/confirm
+ * Requester confirms the proposed shared charging amount and transfers tokens
+ */
+router.post("/requests/:requestId/settlement/confirm", authMiddleware, handleSettlementConfirmationRequest);
+
+/**
+ * POST /api/charging/requests/:requestId/complete
+ * Backward-compatible alias for requester settlement confirmation
+ */
+router.post("/requests/:requestId/complete", authMiddleware, handleSettlementConfirmationRequest);
 
 /**
  * POST /api/charging/requests/:requestId/cancel
@@ -895,208 +1101,9 @@ router.post("/requests/:requestId/cancel", authMiddleware, async (req, res) => {
 
 /**
  * POST /api/charging/requests/:requestId/complete-requester
- * Complete a charging request (requester only)
- * Only the original requester can use this endpoint
- * Updates status to COMPLETED without token transfer (tokens already transferred at creation)
+ * Backward-compatible alias for requester settlement confirmation
  */
-router.post("/requests/:requestId/complete-requester", authMiddleware, async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const userId = req.user._id.toString();
-
-    // Find the request
-    const request = await ChargingRequest.findById(requestId)
-      .populate('requesterId helperId', 'name email city');
-
-    if (!request) {
-      return res.status(404).json({
-        success: false,
-        message: "Charging request not found"
-      });
-    }
-
-    // Authorization check: Only the requester can complete using this endpoint
-    if (request.requesterId._id.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: "Only the requester can mark this request as completed"
-      });
-    }
-
-    // Status check: Only ACCEPTED requests can be completed
-    if (request.status !== "ACCEPTED") {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot complete request with status: ${request.status}. Only ACCEPTED requests can be marked as completed.`
-      });
-    }
-
-    try {
-      if (!request.helperId) {
-        return res.status(400).json({
-          success: false,
-          message: "Cannot complete request without an assigned helper."
-        });
-      }
-
-      const requesterId = request.requesterId._id;
-      const helperId = request.helperId._id;
-
-      const updatedHelper = await User.findByIdAndUpdate(
-        helperId,
-        {
-          $inc: { tokenBalance: TOKEN_COST },
-          $push: {
-            tokenHistory: {
-              amount: TOKEN_COST,
-              type: "reward",
-              description: `Completed charging request for ${request.requesterId.name}`,
-              timestamp: new Date()
-            }
-          }
-        },
-        {
-          new: true,
-          select: 'tokenBalance name email'
-        }
-      );
-
-      if (!updatedHelper) {
-        throw new Error("Failed to update helper tokens");
-      }
-
-      const updatedRequester = await User.findByIdAndUpdate(
-        requesterId,
-        {
-          $push: {
-            tokenHistory: {
-              amount: -TOKEN_COST,
-              type: "payment",
-              description: `Payment to ${request.helperId.name} for charging service`,
-              timestamp: new Date()
-            }
-          }
-        },
-        {
-          new: true,
-          select: 'tokenBalance name email'
-        }
-      );
-
-      if (!updatedRequester) {
-        throw new Error("Failed to update requester history");
-      }
-
-      // Update request status to COMPLETED
-      const updatedRequest = await ChargingRequest.findByIdAndUpdate(
-        requestId,
-        {
-          status: "COMPLETED",
-          completedAt: new Date()
-        },
-        {
-          new: true,
-          populate: [
-            { path: 'requesterId', select: 'name email city' },
-            { path: 'helperId', select: 'name email city' }
-          ]
-        }
-      );
-
-      if (!updatedRequest) {
-        throw new Error("Failed to update request status");
-      }
-
-      // SAFETY CHECK: Reset helper status to allow new requests
-      await User.findByIdAndUpdate(
-        request.helperId._id,
-        {
-          isActiveHelper: false,
-          currentActiveRequest: null
-        }
-      );
-
-      console.log(`Charging request ${requestId} marked as completed by requester`);
-
-      // Emit real-time notifications
-      const io = req.app.get('io');
-      if (io) {
-        const roomName = `city-${request.city.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
-
-        // 1. Notify requester of completion confirmation
-        io.to(request.requesterId._id.toString()).emit('request-completed-by-requester', {
-          request: {
-            id: updatedRequest._id,
-            helperId: updatedRequest.helperId._id,
-            helperName: updatedRequest.helperId.name,
-            status: updatedRequest.status,
-            completedAt: updatedRequest.completedAt
-          },
-          helperNewBalance: updatedHelper.tokenBalance,
-          timestamp: new Date().toISOString()
-        });
-
-        // 2. Notify helper that requester marked as completed
-        if (request.helperId) {
-          io.to(request.helperId._id.toString()).emit('request-completed-by-requester', {
-            request: {
-              id: updatedRequest._id,
-              requesterName: updatedRequest.requesterId.name,
-              status: updatedRequest.status,
-              completedAt: updatedRequest.completedAt
-            },
-            helperNewBalance: updatedHelper.tokenBalance,
-            timestamp: new Date().toISOString()
-          });
-        }
-
-        // 3. Notify city that request was completed
-        io.to(roomName).emit('request-completed-notification', {
-          requestId: updatedRequest._id,
-          message: `A charging request has been completed in ${request.city}`,
-          requesterName: updatedRequest.requesterId.name,
-          helperName: updatedRequest.helperId.name,
-          status: "COMPLETED",
-          completedAt: updatedRequest.completedAt,
-          timestamp: new Date().toISOString()
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "Charging request marked as completed successfully",
-        request: {
-          id: updatedRequest._id,
-          requesterId: updatedRequest.requesterId._id,
-          helperId: updatedRequest.helperId._id,
-          city: updatedRequest.city,
-          status: updatedRequest.status,
-          completedAt: updatedRequest.completedAt
-        },
-        balances: {
-          requester: updatedRequester.tokenBalance,
-          helper: updatedHelper.tokenBalance
-        }
-      });
-
-    } catch (error) {
-      console.error("Error completing charging request:", error);
-
-      res.status(500).json({
-        success: false,
-        message: "Failed to complete charging request. Please try again."
-      });
-    }
-
-  } catch (error) {
-    console.error("Error completing charging request:", error);
-    
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while completing charging request"
-    });
-  }
-});
+router.post("/requests/:requestId/complete-requester", authMiddleware, handleSettlementConfirmationRequest);
 
 /**
  * GET /api/charging/requests/helper

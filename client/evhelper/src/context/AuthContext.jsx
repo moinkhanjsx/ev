@@ -22,6 +22,7 @@ const AUTH_ACTIONS = {
   REGISTER_FAILURE: 'REGISTER_FAILURE',
   CLEAR_ERROR: 'CLEAR_ERROR',
   SET_LOADING: 'SET_LOADING',
+  UPDATE_USER: 'UPDATE_USER',
 };
 
 // Auth reducer
@@ -100,6 +101,12 @@ const authReducer = (state, action) => {
       return {
         ...state,
         loading: action.payload,
+      };
+
+    case AUTH_ACTIONS.UPDATE_USER:
+      return {
+        ...state,
+        user: action.payload,
       };
 
     default:
@@ -215,6 +222,19 @@ export const AuthProvider = ({ children }) => {
       dispatch({
         type: AUTH_ACTIONS.SET_LOADING,
         payload: loading
+      });
+    },
+
+    updateUser: (userOrPatch) => {
+      const nextUser =
+        typeof userOrPatch === 'function'
+          ? userOrPatch(state.user)
+          : { ...(state.user || {}), ...(userOrPatch || {}) };
+
+      localStorage.setItem('evhelper_user', JSON.stringify(nextUser));
+      dispatch({
+        type: AUTH_ACTIONS.UPDATE_USER,
+        payload: nextUser,
       });
     },
   };

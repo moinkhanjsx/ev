@@ -5,6 +5,7 @@ import app from "./src/app.js";
 import ChargingRequest from './src/models/ChargingRequest.js';
 import User from './src/models/User.js';
 import RequestMessage from './src/models/RequestMessage.js';
+import { getBlynkSnapshot, isBlynkConfigured } from "./src/services/blynk.js";
 import { sanitizeCityForRoom } from "./src/utils/city.js";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -26,6 +27,7 @@ const REQUEST_EXPIRE_HOURS = parseInt(process.env.REQUEST_EXPIRE_HOURS || "4", 1
 const REQUEST_EXPIRY_CHECK_MS = 5 * 60 * 1000;
 const REQUEST_EXPIRY_LOCK_MS = 2 * 60 * 1000;
 const REQUEST_EXPIRY_LOCK_ID = "expire-requests";
+const BLYNK_BROADCAST_INTERVAL_MS = parseInt(process.env.BLYNK_BROADCAST_INTERVAL_MS || "15000", 10);
 
 const ensureChatTTLIndex = async () => {
   try {
@@ -156,6 +158,19 @@ const expireOldRequests = async () => {
   }
 };
 
+const broadcastBlynkSnapshot = async () => {
+  if (!isBlynkConfigured()) {
+    return;
+  }
+
+  try {
+    const snapshot = await getBlynkSnapshot({ force: true });
+    io.emit("blynk-status", snapshot);
+  } catch (error) {
+    console.error("Error broadcasting Blynk snapshot:", error);
+  }
+};
+
 // Socket authentication middleware
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token;
@@ -224,7 +239,7 @@ io.on("connection", (socket) => {
    * Event: 'join-city'
    * Data: { city: string }
    */
-  socket.on("join-city", (data) => {
+  socket.on("join-city", async (data) => {
     try {
       if (!socket.userId) {
         socket.emit("error", { message: "User not authenticated" });
@@ -681,4 +696,11 @@ server.listen(PORT, () => {
       await releaseExpiryLock();
     }
   }, REQUEST_EXPIRY_CHECK_MS);
+
+  if (Number.isFinite(BLYNK_BROADCAST_INTERVAL_MS) && BLYNK_BROADCAST_INTERVAL_MS > 0 && isBlynkConfigured()) {
+    void broadcastBlynkSnapshot();
+    setInterval(() => {
+      void broadcastBlynkSnapshot();
+    }, BLYNK_BROADCAST_INTERVAL_MS);
+  }
 });
