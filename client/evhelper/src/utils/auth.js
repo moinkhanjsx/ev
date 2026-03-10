@@ -4,13 +4,49 @@ import axios from 'axios';
 // - In dev, prefer '/api' so Vite can proxy to the backend.
 // - In prod, VITE_API_URL can point at a full origin like 'https://your-domain.com/api'.
 const API_BASE_URL = (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.trim()) || '/api';
+const configuredTimeoutMs = Number.parseInt(import.meta.env.VITE_API_TIMEOUT_MS || '', 10);
+const API_TIMEOUT_MS =
+  Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+    ? configuredTimeoutMs
+    : import.meta.env.PROD
+      ? 30000
+      : 10000;
+const DEFAULT_TIMEOUT_MESSAGE =
+  'The server is taking longer than expected to respond. The backend may be waking up. Please try again in a few seconds.';
+
+export const getApiErrorMessage = (error, fallbackMessage = 'Request failed') => {
+  if (error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')) {
+    return DEFAULT_TIMEOUT_MESSAGE;
+  }
+
+  if (typeof error?.response?.data?.message === 'string' && error.response.data.message.trim()) {
+    return error.response.data.message;
+  }
+
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  return fallbackMessage;
+};
+
+const normalizeApiError = (error, fallbackMessage) => ({
+  message: getApiErrorMessage(error, fallbackMessage),
+  code: error?.code || null,
+  status: error?.response?.status || null,
+});
+
 // Create axios instance with default configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: API_TIMEOUT_MS,
 });
 
 // Request interceptor to automatically attach JWT token
@@ -45,7 +81,9 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('Response interceptor error:', error);
+    if (import.meta.env.DEV) {
+      console.error('Response interceptor error:', error);
+    }
     
     // Handle 401 errors from response interceptor
     if (error.response?.status === 401) {
@@ -76,8 +114,10 @@ export const authAPI = {
       const response = await api.post('/auth/register', userData);
       return response.data;
     } catch (error) {
-      console.error('Registration error:', error);
-      throw error.response?.data || error.message;
+      if (import.meta.env.DEV) {
+        console.error('Registration error:', error);
+      }
+      throw normalizeApiError(error, 'Registration failed');
     }
   },
 
@@ -98,8 +138,10 @@ export const authAPI = {
         throw new Error(response.data.message || 'Login failed');
       }
     } catch (error) {
-      console.error('Login error:', error);
-      throw error.response?.data || error.message;
+      if (import.meta.env.DEV) {
+        console.error('Login error:', error);
+      }
+      throw normalizeApiError(error, 'Login failed');
     }
   },
 
@@ -117,8 +159,10 @@ export const authAPI = {
 
       throw new Error(response.data.message || 'Google login failed');
     } catch (error) {
-      console.error('Google login error:', error);
-      throw error.response?.data || error.message;
+      if (import.meta.env.DEV) {
+        console.error('Google login error:', error);
+      }
+      throw normalizeApiError(error, 'Google login failed');
     }
   },
 
@@ -162,8 +206,10 @@ export const authAPI = {
         throw new Error(response.data.message || 'Profile update failed');
       }
     } catch (error) {
-      console.error('Profile update error:', error);
-      throw error.response?.data || error.message;
+      if (import.meta.env.DEV) {
+        console.error('Profile update error:', error);
+      }
+      throw normalizeApiError(error, 'Profile update failed');
     }
   },
 };

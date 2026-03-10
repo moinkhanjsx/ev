@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../utils/auth.js';
+import { api, getApiErrorMessage } from '../utils/auth.js';
 import socketService from '../utils/socket.js';
 import AcceptedRequestsList from '../components/AcceptedRequestsList';
 import BlynkDevicePanel from '../components/BlynkDevicePanel.jsx';
@@ -55,6 +55,12 @@ const DashboardPage = () => {
     }
 
     actions.updateUser({ tokenBalance: nextBalance });
+  };
+
+  const logDevError = (...args) => {
+    if (import.meta.env.DEV) {
+      console.error(...args);
+    }
   };
 
   useEffect(() => {
@@ -194,7 +200,7 @@ const DashboardPage = () => {
         setError(response.data.message || 'Failed to fetch your requests');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch your requests');
+      setError(getApiErrorMessage(err, 'Failed to fetch your requests'));
     } finally {
       setLoading(false);
     }
@@ -214,11 +220,11 @@ const DashboardPage = () => {
       if (response.data.success) {
         setAcceptedRequests(response.data.requests || []);
       } else {
-        console.error('Failed to fetch accepted requests:', response.data.message);
+        logDevError('Failed to fetch accepted requests:', response.data.message);
         setAcceptedRequests([]);
       }
     } catch (err) {
-      console.error('Error fetching accepted requests:', err.response?.data?.message || err.message);
+      logDevError('Error fetching accepted requests:', getApiErrorMessage(err, 'Failed to fetch accepted requests'));
       setAcceptedRequests([]);
     } finally {
       setHelperLoading(false);
@@ -245,7 +251,7 @@ const DashboardPage = () => {
         return [];
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch your accepted requests');
+      setError(getApiErrorMessage(err, 'Failed to fetch your accepted requests'));
       return [];
     } finally {
       setLoading(false);
@@ -261,10 +267,12 @@ const DashboardPage = () => {
       
       if (response.data.success) {
         // This could be used to show city requests in a separate section
-        console.log('City requests for dashboard:', response.data.requests);
+        if (import.meta.env.DEV) {
+          console.log('City requests for dashboard:', response.data.requests);
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch city requests:', err);
+      logDevError('Failed to fetch city requests:', getApiErrorMessage(err, 'Failed to fetch city requests'));
     }
   };
 
@@ -283,7 +291,7 @@ const DashboardPage = () => {
         alert(response.data.message || 'Failed to accept request');
       }
     } catch (error) {
-      alert(error.response?.data?.message || error.message || 'Failed to accept request');
+      alert(getApiErrorMessage(error, 'Failed to accept request'));
     }
   };
 
@@ -299,7 +307,7 @@ const DashboardPage = () => {
         alert(response.data.message || 'Failed to cancel request');
       }
     } catch (error) {
-      alert(error.response?.data?.message || error.message || 'Failed to cancel request');
+      alert(getApiErrorMessage(error, 'Failed to cancel request'));
     }
   };
 
@@ -316,7 +324,7 @@ const DashboardPage = () => {
         alert(response.data.message || 'Failed to submit shared charging amount');
       }
     } catch (error) {
-      alert(error.response?.data?.message || error.message || 'Failed to submit shared charging amount');
+      alert(getApiErrorMessage(error, 'Failed to submit shared charging amount'));
     } finally {
       setSubmittingSettlementId(null);
     }
@@ -336,7 +344,7 @@ const DashboardPage = () => {
         alert(response.data.message || 'Failed to confirm settlement');
       }
     } catch (error) {
-      alert(error.response?.data?.message || error.message || 'Failed to confirm settlement');
+      alert(getApiErrorMessage(error, 'Failed to confirm settlement'));
     } finally {
       setConfirmingSettlementId(null);
     }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { api } from "../utils/auth.js";
+import { api, getApiErrorMessage } from "../utils/auth.js";
 
 const BlynkDevicePanel = () => {
   const { state } = useAuth();
@@ -25,7 +25,7 @@ const BlynkDevicePanel = () => {
           return;
         }
 
-        setError(requestError.response?.data?.message || "Blynk dashboard is not available right now.");
+        setError(getApiErrorMessage(requestError, "Blynk dashboard is not available right now."));
       } finally {
         if (active) {
           setLoading(false);
