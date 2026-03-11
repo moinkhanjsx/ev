@@ -53,6 +53,7 @@ router.post("/register", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Registration error:", error);
     res.status(500).json({ message: "Registration failed" });
   }
 });
@@ -97,6 +98,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Login route error:", error);
     res.status(500).json({ message: "Login failed" });
   }
 });

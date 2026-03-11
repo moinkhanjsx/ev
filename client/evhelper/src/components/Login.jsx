@@ -16,6 +16,10 @@ const Login = () => {
   const [showCityPrompt, setShowCityPrompt] = useState(false);
   const [pendingCredential, setPendingCredential] = useState(null);
   const googleBtnRef = useRef(null);
+  const showGoogleLocalHint =
+    import.meta.env.DEV &&
+    typeof window !== 'undefined' &&
+    /localhost|127\.0\.0\.1/i.test(window.location.origin);
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -261,6 +265,12 @@ const Login = () => {
             {/* Google Login */}
             <div className="text-center">
               <div ref={googleBtnRef} className="inline-flex justify-center"></div>
+              {showGoogleLocalHint && (
+                <p className="mt-3 text-xs text-gray-400">
+                  For Google sign-in in local dev, add {window.location.origin} to the Authorized JavaScript origins
+                  for this Google client ID in Google Cloud Console.
+                </p>
+              )}
               {googleError && (
                 <p className="mt-3 text-sm text-red-400">{googleError}</p>
               )}

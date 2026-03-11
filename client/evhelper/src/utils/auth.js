@@ -13,8 +13,20 @@ const API_TIMEOUT_MS =
       : 10000;
 const DEFAULT_TIMEOUT_MESSAGE =
   'The server is taking longer than expected to respond. The backend may be waking up. Please try again in a few seconds.';
+const LOCAL_BACKEND_UNAVAILABLE_MESSAGE =
+  'Local API is unavailable. Start the backend on http://localhost:5000 and try again.';
 
 export const getApiErrorMessage = (error, fallbackMessage = 'Request failed') => {
+  const isLocalProxyFailure =
+    import.meta.env.DEV &&
+    API_BASE_URL === '/api' &&
+    error?.response?.status === 500 &&
+    (error?.response?.data === '' || error?.response?.data == null);
+
+  if (isLocalProxyFailure) {
+    return LOCAL_BACKEND_UNAVAILABLE_MESSAGE;
+  }
+
   if (error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '')) {
     return DEFAULT_TIMEOUT_MESSAGE;
   }
