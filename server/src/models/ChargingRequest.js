@@ -32,6 +32,21 @@ const chargingRequestSchema = new mongoose.Schema(
       trim: true,
     },
 
+    locationCoordinates: {
+      latitude: {
+        type: Number,
+        default: null,
+        min: -90,
+        max: 90,
+      },
+      longitude: {
+        type: Number,
+        default: null,
+        min: -180,
+        max: 180,
+      },
+    },
+
     urgency: {
       type: String,
       required: true,

@@ -135,6 +135,27 @@ const DashboardPage = () => {
         setToast('Shared amount updated');
       };
 
+      const onRequestLocationUpdated = (data) => {
+        const id = data?.request?._id || data?.request?.id;
+        const locationCoordinates = data?.request?.locationCoordinates || null;
+
+        if (!id || !locationCoordinates) {
+          return;
+        }
+
+        setRequests((prev) =>
+          prev.map((request) =>
+            request._id === id ? { ...request, locationCoordinates } : request
+          )
+        );
+
+        setAcceptedRequests((prev) =>
+          prev.map((request) =>
+            request._id === id ? { ...request, locationCoordinates } : request
+          )
+        );
+      };
+
       const onRequestCompleted = (data) => {
         fetchRequests();
         fetchAcceptedRequests();
@@ -161,6 +182,7 @@ const DashboardPage = () => {
       socketService.on('request-expired-notification', onRequestExpiredNotification);
       socketService.on('request-expired', onRequestExpired);
       socketService.on('request-settlement-proposed', onSettlementProposed);
+      socketService.on('request-location-updated', onRequestLocationUpdated);
 
       // Initial load
       fetchRequests();
@@ -175,6 +197,7 @@ const DashboardPage = () => {
         socketService.off('request-expired-notification', onRequestExpiredNotification);
         socketService.off('request-expired', onRequestExpired);
         socketService.off('request-settlement-proposed', onSettlementProposed);
+        socketService.off('request-location-updated', onRequestLocationUpdated);
       };
     }
   }, [state.isAuthenticated, state.user?.city, currentUserId]);

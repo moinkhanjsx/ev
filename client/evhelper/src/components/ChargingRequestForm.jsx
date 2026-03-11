@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, authAPI } from '../utils/auth.js';
+import { api } from '../utils/auth.js';
+
+const LocationPicker = lazy(() => import('./LocationPicker.jsx'));
+const buildGpsLocationLabel = (locationCoordinates) =>
+  `GPS location (${locationCoordinates.latitude.toFixed(6)}, ${locationCoordinates.longitude.toFixed(6)})`;
 
 const ChargingRequestForm = () => {
   const navigate = useNavigate();
@@ -13,13 +17,22 @@ const ChargingRequestForm = () => {
     phoneNumber: '',
     estimatedTime: ''
   });
+  const [locationCoordinates, setLocationCoordinates] = useState(null);
+  const [locationStatus, setLocationStatus] = useState({
+    hasLocation: false,
+    isDetectingLocation: false,
+    error: '',
+    trackingEnabled: false,
+    accuracy: null,
+  });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLocationAutoFilled, setIsLocationAutoFilled] = useState(false);
 
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.location.trim()) {
+    if (!formData.location.trim() && !locationCoordinates) {
       newErrors.location = 'Location is required';
     }
 
@@ -41,6 +54,10 @@ const ChargingRequestForm = () => {
       newErrors.estimatedTime = 'Estimated time must be a positive number (minutes)';
     }
 
+    if (!locationCoordinates) {
+      newErrors.locationCoordinates = locationStatus.error || 'Current location is required. Please allow GPS access.';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -54,12 +71,16 @@ const ChargingRequestForm = () => {
     setErrors({});
 
     try {
+      const resolvedLocation =
+        formData.location.trim() || (locationCoordinates ? buildGpsLocationLabel(locationCoordinates) : '');
+
       const requestData = {
-        location: formData.location.trim(),
+        location: resolvedLocation,
         urgency: formData.urgency.toLowerCase(),
         message: formData.message.trim(),
         phoneNumber: formData.phoneNumber.trim(),
-        estimatedTime: formData.estimatedTime ? parseInt(formData.estimatedTime) : null
+        estimatedTime: formData.estimatedTime ? parseInt(formData.estimatedTime) : null,
+        ...(locationCoordinates ? { locationCoordinates } : {})
       };
 
       const response = await api.post('/charging/requests', requestData);
@@ -72,6 +93,8 @@ const ChargingRequestForm = () => {
           phoneNumber: '',
           estimatedTime: ''
         });
+        setLocationCoordinates(null);
+        setIsLocationAutoFilled(false);
         
         alert('Charging request created successfully!');
         navigate('/dashboard', { replace: true });
@@ -88,6 +111,10 @@ const ChargingRequestForm = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+
+    if (name === 'location') {
+      setIsLocationAutoFilled(false);
+    }
     
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
@@ -153,7 +180,7 @@ const ChargingRequestForm = () => {
               {/* Location Field */}
               <div className="ev-formal-field">
                 <label htmlFor="location" className="ev-formal-label block">
-                  Location *
+                  Location / Landmark
                 </label>
                 <textarea
                   id="location"
@@ -164,10 +191,90 @@ const ChargingRequestForm = () => {
                   rows={3}
                   placeholder="Enter your current location or address"
                 />
-                <p className="ev-formal-helper">Be as specific as possible for quick help.</p>
+                <p className="ev-formal-helper">
+                  {locationCoordinates
+                    ? 'Auto-filled from GPS. You can edit this to add a landmark or address.'
+                    : 'If GPS is unavailable, enter a specific landmark or address manually.'}
+                </p>
                 {errors.location && (
                   <p className="mt-4 text-sm text-red-400">{errors.location}</p>
                 )}
+              </div>
+
+              <div className="ev-formal-field">
+                <div className="flex flex-col gap-2">
+                  <label className="ev-formal-label block">Charging Location</label>
+                  <p className="ev-formal-helper">
+                    Tap enable once, then this request will use your current browser GPS location.
+                  </p>
+                </div>
+
+                <div className="h-[360px] overflow-hidden rounded-[28px] border border-white/10 bg-black/20 p-3">
+                  <Suspense
+                    fallback={
+                      <div className="flex h-full items-center justify-center rounded-2xl border border-white/10 bg-slate-950/30 text-sm text-gray-400">
+                        Loading map...
+                      </div>
+                    }
+                  >
+                    <LocationPicker
+                      onLocationSelect={(latitude, longitude) => {
+                        const nextCoordinates = {
+                          latitude,
+                          longitude,
+                        };
+                        const nextLocationLabel = buildGpsLocationLabel(nextCoordinates);
+                        let shouldAutoFillLocation = false;
+
+                        setLocationCoordinates(nextCoordinates);
+
+                        setFormData((prev) => {
+                          shouldAutoFillLocation =
+                            !prev.location.trim() ||
+                            isLocationAutoFilled ||
+                            prev.location.startsWith('GPS location (');
+
+                          return shouldAutoFillLocation
+                            ? { ...prev, location: nextLocationLabel }
+                            : prev;
+                        });
+
+                        setIsLocationAutoFilled(shouldAutoFillLocation);
+
+                        if (errors.locationCoordinates || errors.location) {
+                          setErrors((prev) => ({
+                            ...prev,
+                            locationCoordinates: '',
+                            location: '',
+                          }));
+                        }
+                      }}
+                      onLocationStateChange={setLocationStatus}
+                    />
+                  </Suspense>
+                </div>
+
+                {locationCoordinates ? (
+                  <p className="mt-4 text-sm text-emerald-300">
+                    Live GPS locked: {locationCoordinates.latitude.toFixed(6)}, {locationCoordinates.longitude.toFixed(6)}
+                  </p>
+                ) : (
+                  <p className="mt-4 text-sm text-gray-400">
+                    {locationStatus.isDetectingLocation
+                      ? 'Detecting your current location...'
+                      : locationStatus.trackingEnabled
+                        ? 'Waiting for current GPS location.'
+                        : 'Enable current location to continue.'}
+                  </p>
+                )}
+                {errors.locationCoordinates ? (
+                  <p className="mt-4 text-sm text-red-400">{errors.locationCoordinates}</p>
+                ) : null}
+                {locationStatus.accuracy !== null ? (
+                  <p className="mt-4 text-sm text-gray-400">
+                    Current accuracy: {Math.round(locationStatus.accuracy)} m
+                  </p>
+                ) : null}
               </div>
 
               {/* Urgency Field */}
@@ -262,7 +369,7 @@ const ChargingRequestForm = () => {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !locationCoordinates || locationStatus.isDetectingLocation}
                 className="ev-formal-button w-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
@@ -270,6 +377,8 @@ const ChargingRequestForm = () => {
                     <div className="ev-loading mr-3"></div>
                     Creating Request...
                   </span>
+                ) : locationStatus.isDetectingLocation ? (
+                  'Detecting Current Location...'
                 ) : (
                   'Create Charging Request'
                 )}

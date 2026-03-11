@@ -67,6 +67,30 @@ const normalizeSharedUnits = (value) => {
   return Number(parsedValue.toFixed(2));
 };
 
+const normalizeLocationCoordinates = (value) => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const latitude =
+    typeof value.latitude === "number" ? value.latitude : Number.parseFloat(value.latitude);
+  const longitude =
+    typeof value.longitude === "number" ? value.longitude : Number.parseFloat(value.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return null;
+  }
+
+  return {
+    latitude: Number(latitude.toFixed(6)),
+    longitude: Number(longitude.toFixed(6)),
+  };
+};
+
 const calculateSettlementTokens = (sharedUnits) =>
   Number((sharedUnits * TOKENS_PER_SHARED_UNIT).toFixed(2));
 
@@ -98,6 +122,9 @@ const buildRequestUpdatePayload = (request) => ({
   _id: request?._id,
   requesterId: toParticipantId(request?.requesterId),
   helperId: toParticipantId(request?.helperId),
+  city: request?.city,
+  location: request?.location,
+  locationCoordinates: request?.locationCoordinates || null,
   status: request?.status,
   tokenCost: Number(request?.tokenCost || 0),
   acceptedAt: request?.acceptedAt || null,
@@ -330,6 +357,33 @@ const handleSettlementConfirmationRequest = async (req, res) => {
   }
 };
 
+const emitRequestLocationUpdate = (io, request) => {
+  if (!io || !request?._id) {
+    return;
+  }
+
+  const payload = {
+    request: {
+      id: request._id,
+      _id: request._id,
+      requesterId: toParticipantId(request.requesterId),
+      helperId: toParticipantId(request.helperId),
+      status: request.status,
+      locationCoordinates: request.locationCoordinates || null,
+      updatedAt: request.updatedAt || new Date(),
+    },
+    timestamp: new Date().toISOString(),
+  };
+
+  io.to(toParticipantId(request.requesterId)).emit("request-location-updated", payload);
+
+  if (request.helperId) {
+    io.to(toParticipantId(request.helperId)).emit("request-location-updated", payload);
+  }
+
+  io.to(`request-${request._id}`).emit("request-location-updated", payload);
+};
+
 /**
  * POST /api/charging/requests
  * Create a new charging request
@@ -338,13 +392,24 @@ const handleSettlementConfirmationRequest = async (req, res) => {
  */
 router.post("/requests", authMiddleware, async (req, res) => {
   try {
-    const { location, urgency, message, phoneNumber, contactInfo, contact, estimatedTime, timeAvailable } = req.body;
+    const {
+      location,
+      urgency,
+      message,
+      phoneNumber,
+      contactInfo,
+      contact,
+      estimatedTime,
+      timeAvailable,
+      locationCoordinates,
+    } = req.body;
     const userId = req.user._id;
     const userCity = req.user.city;
     let tokensDeducted = false;
 
     const rawPhoneNumber = phoneNumber ?? contactInfo ?? contact;
     const normalizedPhoneNumber = typeof rawPhoneNumber === "string" ? rawPhoneNumber.trim() : "";
+    const normalizedLocationCoordinates = normalizeLocationCoordinates(locationCoordinates);
 
     // Validate required fields
     if (!location || !urgency || !normalizedPhoneNumber) {
@@ -420,6 +485,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
         city: userCity,
         status: "OPEN",
         location: location.trim(),
+        ...(normalizedLocationCoordinates ? { locationCoordinates: normalizedLocationCoordinates } : {}),
         urgency: urgency.toLowerCase(),
         message: message ? message.trim() : "",
         phoneNumber: normalizedPhoneNumber,
@@ -455,6 +521,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
           requesterEmail: updatedUser.email,
           city: request.city,
           location: request.location,
+          locationCoordinates: request.locationCoordinates || null,
           urgency: request.urgency,
           message: request.message,
           phoneNumber: request.phoneNumber,
@@ -477,6 +544,7 @@ router.post("/requests", authMiddleware, async (req, res) => {
           city: request.city,
           status: request.status,
           location: request.location,
+          locationCoordinates: request.locationCoordinates || null,
           urgency: request.urgency,
           message: request.message,
           phoneNumber: request.phoneNumber,
@@ -925,6 +993,67 @@ router.post("/requests/:requestId/settlement", authMiddleware, async (req, res) 
  * Requester confirms the proposed shared charging amount and transfers tokens
  */
 router.post("/requests/:requestId/settlement/confirm", authMiddleware, handleSettlementConfirmationRequest);
+
+router.post("/requests/:requestId/location", authMiddleware, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const userId = req.user._id.toString();
+    const normalizedLocationCoordinates = normalizeLocationCoordinates(req.body?.locationCoordinates);
+
+    if (!normalizedLocationCoordinates) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid location coordinates are required.",
+      });
+    }
+
+    const request = await ChargingRequest.findById(requestId);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Charging request not found",
+      });
+    }
+
+    if (request.requesterId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the requester can update the request location",
+      });
+    }
+
+    if (!["OPEN", "ACCEPTED"].includes(request.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot update location for a request with status: ${request.status}`,
+      });
+    }
+
+    request.locationCoordinates = normalizedLocationCoordinates;
+    await request.save();
+
+    const io = req.app.get("io");
+    emitRequestLocationUpdate(io, request);
+
+    return res.json({
+      success: true,
+      message: "Request location updated successfully",
+      request: {
+        id: request._id,
+        _id: request._id,
+        locationCoordinates: request.locationCoordinates,
+        status: request.status,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating request location:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update request location",
+    });
+  }
+});
 
 /**
  * POST /api/charging/requests/:requestId/complete

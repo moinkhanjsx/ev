@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
+
+const NavigationMap = lazy(() => import('./NavigationMap.jsx'));
 
 const formatTokenValue = (value) => {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -11,6 +13,7 @@ const formatTokenValue = (value) => {
 
 const AcceptedRequestsList = ({ requests, onSubmitSettlement, submittingSettlementId, onOpenChat }) => {
   const [sharedUnitsByRequest, setSharedUnitsByRequest] = React.useState({});
+  const [navigationRequestId, setNavigationRequestId] = React.useState(null);
 
   React.useEffect(() => {
     setSharedUnitsByRequest((previous) => {
@@ -66,6 +69,10 @@ const AcceptedRequestsList = ({ requests, onSubmitSettlement, submittingSettleme
         const settlementSubmitted = settlement.status === 'PROPOSED';
         const buttonLabel = settlementSubmitted ? 'Update Shared Amount' : 'Submit Shared Amount';
         const isSubmitting = submittingSettlementId === request._id;
+        const hasNavigation =
+          Number.isFinite(Number(request.locationCoordinates?.latitude)) &&
+          Number.isFinite(Number(request.locationCoordinates?.longitude));
+        const isNavigationOpen = navigationRequestId === request._id;
 
         return (
           <div key={request._id} className="ev-formal-card ev-formal-compact p-4 sm:p-6">
@@ -159,6 +166,19 @@ const AcceptedRequestsList = ({ requests, onSubmitSettlement, submittingSettleme
                     >
                       Open Chat
                     </button>
+                    {hasNavigation ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setNavigationRequestId((currentValue) =>
+                            currentValue === request._id ? null : request._id
+                          )
+                        }
+                        className="ev-formal-button w-full md:w-auto"
+                      >
+                        {isNavigationOpen ? 'Hide Navigation' : 'View Navigation'}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -172,6 +192,29 @@ const AcceptedRequestsList = ({ requests, onSubmitSettlement, submittingSettleme
                     Submit the exact amount you shared. The requester will review it and confirm the token transfer.
                   </div>
                 )}
+
+                {isNavigationOpen ? (
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="mb-3">
+                      <h4 className="text-sm font-medium text-white">Navigation</h4>
+                      <p className="text-xs text-gray-400">
+                        Live route to the requester using OpenStreetMap and OSRM.
+                      </p>
+                    </div>
+
+                    <div className="h-[420px]">
+                      <Suspense
+                        fallback={
+                          <div className="flex h-full items-center justify-center rounded-2xl border border-white/10 bg-slate-950/30 text-sm text-gray-400">
+                            Loading navigation...
+                          </div>
+                        }
+                      >
+                        <NavigationMap requestLocation={request.locationCoordinates} />
+                      </Suspense>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
