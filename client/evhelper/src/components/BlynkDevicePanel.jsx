@@ -53,7 +53,7 @@ const BlynkDevicePanel = () => {
       <div className="ev-section">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl">
-            <h2 className="ev-formal-title">Blynk Dashboard</h2>
+            <h2 className="ev-formal-title">View Status</h2>
             <p className="ev-formal-subtitle">
               Open the original Blynk dashboard in a new tab for the live hardware view.
             </p>
