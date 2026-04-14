@@ -66,7 +66,7 @@ const BlynkDevicePanel = () => {
               rel="noreferrer"
               className="ev-formal-button w-full lg:w-auto text-sm sm:text-base"
             >
-              Open Blynk
+              Open
             </a>
           ) : null}
         </div>
