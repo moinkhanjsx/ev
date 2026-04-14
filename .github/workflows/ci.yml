@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, blackboxai/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci --prefix ev
+      - run: npm ci --prefix ev/server
+      - run: npm ci --prefix ev/client/evhelper
+      - run: npm run build --prefix ev
+      - run: npm test # if tests exist
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci --prefix ev/client/evhelper
+      - run: npm run lint --prefix ev/client/evhelper
